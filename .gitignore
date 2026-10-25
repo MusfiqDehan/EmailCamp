@@ -1,5 +1,8 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.cursor/
+graphify-out/
+CLAUDE.md
 
 # C extensions
 *.so

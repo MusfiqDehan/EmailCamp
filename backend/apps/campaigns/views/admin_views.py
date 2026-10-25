@@ -7,32 +7,17 @@ All views use APIView for explicit control over request handling.
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
 from django.db.models import Count, Sum, Avg
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 from ..models import EmailProvider, OrganizationEmailConfiguration
 from ..serializers import EmailProviderSerializer
 from apps.utils.responses import success, error
 from apps.authentication.models import Organization
+from apps.authentication.permissions import IsPlatformAdmin
 from ..serializers.admin_serializers import AdminOrganizationSerializer
-
-
-class IsPlatformAdmin(IsAdminUser):
-    """
-    Permission class for platform administrators.
-    
-    Platform admins can manage shared providers and view all organizations.
-    Checks is_platform_admin field on User model (not is_staff).
-    """
-    
-    def has_permission(self, request, view):
-        return (
-            request.user and 
-            request.user.is_authenticated and 
-            getattr(request.user, 'is_platform_admin', False)
-        )
 
 
 # =============================================================================
@@ -46,7 +31,7 @@ class AdminEmailProviderListCreateView(APIView):
     GET /admin/providers/
     POST /admin/providers/
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPlatformAdmin]
     
     def get_queryset(self, request):
         """Return shared providers or all providers for superusers."""
@@ -95,7 +80,7 @@ class AdminEmailProviderDetailView(APIView):
     PATCH /admin/providers/{id}/
     DELETE /admin/providers/{id}/
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPlatformAdmin]
     
     def get_object(self, pk, user):
         queryset = EmailProvider.objects.filter(is_deleted=False)
@@ -197,7 +182,7 @@ class AdminEmailProviderTestSendView(APIView):
     POST /admin/providers/{id}/test-send/
     Body: {"email": "test@example.com"}
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPlatformAdmin]
     
     def post(self, request, pk):
         """Send a test email using this provider."""
@@ -317,17 +302,12 @@ Sent at: {timezone.now().strftime('%Y-%m-%d %H:%M:%S UTC')}
             
             # Send the email
             email.send()
-            
-            # Update provider stats
-            provider.last_used_at = timezone.now()
-            provider.emails_sent_today += 1
-            provider.emails_sent_this_hour += 1
+
+            from ..utils.atomic_counters import increment_provider_send_counters
+            increment_provider_send_counters(provider=provider)
             provider.health_status = 'HEALTHY'
             provider.last_health_check = timezone.now()
             provider.save(update_fields=[
-                'last_used_at', 
-                'emails_sent_today', 
-                'emails_sent_this_hour',
                 'health_status',
                 'last_health_check'
             ])
@@ -520,27 +500,34 @@ class AdminOrganizationUpgradePlanView(APIView):
     permission_classes = [IsPlatformAdmin]
     
     def post(self, request, pk):
-        """Upgrade an organization's plan."""
-        config, created = OrganizationEmailConfiguration.objects.get_or_create(
-            organization_id=pk,
-            defaults={'is_deleted': False}
-        )
-        
+        """Upgrade an organization's plan (delegates to the Package catalog)."""
+        from ..models import Package
+        from ..services.package_service import assign_package
+
+        organization = get_object_or_404(Organization, pk=pk)
         new_plan = request.data.get('plan_type')
         if not new_plan:
             return error(message='plan_type is required')
-        
-        valid_plans = ['FREE', 'BASIC', 'PROFESSIONAL', 'ENTERPRISE']
-        if new_plan.upper() not in valid_plans:
-            return error(message=f'Invalid plan. Must be one of: {valid_plans}')
-        
-        old_plan = config.plan_type
-        config.plan_type = new_plan.upper()
-        config.save()  # This will auto-sync plan limits
-        
+
+        package = Package.objects.filter(name=new_plan.lower(), is_active=True).first()
+        if not package:
+            valid = list(Package.objects.filter(is_active=True).values_list('name', flat=True))
+            return error(message=f'Invalid plan. Must be one of: {valid}')
+
+        try:
+            config, changed = assign_package(
+                organization, package, actor=request.user, allow_downgrade=True
+            )
+        except ValidationError as exc:
+            return error(message='; '.join(exc.messages))
+
         return success(
-            message=f'Organization {config.organization.name} upgraded from {old_plan} to {config.plan_type}',
-            data={'new_limits': config.plan_limits}
+            message=(
+                f'Organization {organization.name} is already on {package.name}'
+                if not changed
+                else f'Organization {organization.name} upgraded to {package.name}'
+            ),
+            data={'new_limits': config.get_effective_limits(), 'changed': changed}
         )
 
 

@@ -67,10 +67,10 @@ INSTALLED_APPS = [
     # Third-party apps
     'rest_framework',
     'rest_framework_simplejwt',
+    # django-health-check 4.x consolidated the per-backend check apps
+    # (health_check.db/cache/storage) into this single app; the individual
+    # checks are now selected on the view in config/urls.py.
     "health_check",
-    "health_check.db",
-    "health_check.cache",
-    "health_check.storage",
     'drf_spectacular',
     'drf_spectacular_sidecar',
     'django_celery_beat',
@@ -150,6 +150,7 @@ REST_FRAMEWORK = {
         "auth_sustained": "100/day",
         "organization": "500/min",
         "email_sending": "60/min",
+        "domain_verify": "1/min",
     },
 
 }
@@ -305,6 +306,7 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=config('EMAIL_HOST_USER', default='noreply@example.com'))
 
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
+DEEPSEEK_API_KEY = config('DEEPSEEK_API_KEY', default='')
 
 # ========================================================================
 # ORGANIZATION EMAIL PROVIDER SETTINGS
@@ -326,3 +328,31 @@ VAPID_CLAIM_EMAIL = {
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3001')
 BACKEND_URL = config('BACKEND_URL', default='http://localhost:8001')
+PUBLIC_API_BASE_URL = config('PUBLIC_API_BASE_URL', default=BACKEND_URL)
+
+# ========================================================================
+# AWS SES EVENT / INBOUND SETTINGS (django-ses)
+# Point SNS topics for bounce/complaint/delivery/open/click/received here:
+#   POST {PUBLIC_API_BASE_URL}/api/v1/campaigns/webhooks/ses/
+# ========================================================================
+AWS_SES_CONFIGURATION_SET = config('AWS_SES_CONFIGURATION_SET', default='')
+AWS_SES_VERIFY_EVENT_SIGNATURES = config('AWS_SES_VERIFY_EVENT_SIGNATURES', default='True') == 'True'
+AWS_SES_VERIFY_BOUNCE_SIGNATURES = AWS_SES_VERIFY_EVENT_SIGNATURES
+AWS_SES_INBOUND_HANDLER = config(
+    'AWS_SES_INBOUND_HANDLER',
+    default='apps.campaigns.services.ses_inbound.SESInboundHandler',
+)
+
+# Platform-owned AWS account used to provision SES identities for
+# platform-managed sending domains (ownership_mode=PLATFORM).
+AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
+AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
+AWS_SES_REGION_NAME = config('AWS_SES_REGION_NAME', default='us-east-1')
+
+# Static django-ses defaults. Per-provider values are passed as backend kwargs
+# by ProviderBackendResolver — these must stay static so concurrent sends for
+# different organizations cannot race on process-wide settings.
+# Auto-throttle off avoids GetSendQuota calls that fail under cross-region or
+# temporary credentials.
+AWS_SES_AUTO_THROTTLE = 0
+USE_SES_V2 = True

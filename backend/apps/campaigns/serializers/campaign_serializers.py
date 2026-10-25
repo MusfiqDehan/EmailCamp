@@ -847,7 +847,20 @@ class CampaignSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'subject': "Either 'subject' or a valid 'email_template' with email_subject is required."
             })
-        
+
+        # Once an org has registered sending domains/sender emails, the
+        # resolved from-address must be one of its active sender identities.
+        request = self.context.get('request')
+        organization = getattr(getattr(request, 'user', None), 'organization', None)
+        if organization:
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            from ..utils.sender_validation import validate_sender
+            resolved_from_email = from_email or template_from_email or provider_from_email
+            try:
+                validate_sender(organization, resolved_from_email)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({'from_email': exc.messages})
+
         return attrs
     
     def _apply_settings(self, validated_data):
@@ -1065,6 +1078,7 @@ class UnsubscribeSerializer(serializers.Serializer):
     token = serializers.CharField(help_text="Unsubscribe token from email link")
     reason = serializers.CharField(
         required=False,
+        allow_blank=True,
         max_length=500,
         help_text="Optional reason for unsubscribing"
     )
@@ -1073,8 +1087,7 @@ class UnsubscribeSerializer(serializers.Serializer):
         contact = Contact.objects.filter(unsubscribe_token=value).first()
         if not contact:
             raise serializers.ValidationError("Invalid unsubscribe token")
-        if contact.status == 'UNSUBSCRIBED':
-            raise serializers.ValidationError("Already unsubscribed")
+        # Idempotent: already unsubscribed is OK (handled in the view)
         return value
 
 

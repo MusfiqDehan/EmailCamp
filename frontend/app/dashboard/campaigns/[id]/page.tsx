@@ -8,7 +8,7 @@ import api from '@/config/axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ArrowLeft, Play, Copy, Eye, Send, AlertCircle, CheckCircle2, Clock, PauseCircle, XCircle, Rocket, Calendar, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Play, Copy, Eye, Send, AlertCircle, CheckCircle2, Clock, PauseCircle, XCircle, Rocket, Calendar, RotateCcw, LineChart, Filter } from 'lucide-react';
 import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { CampaignTimelineChart, type CampaignTimelinePoint } from '@/components/dashboard/charts/campaign-timeline-chart';
+import { EngagementFunnelChart } from '@/components/dashboard/charts/engagement-funnel-chart';
 
 interface Campaign {
     id: string;
@@ -43,6 +45,11 @@ interface Campaign {
     tags: string[];
     total_recipients: number; // For backward compat if needed
     stats_total_recipients: number;
+    stats_sent?: number;
+    stats_delivered?: number;
+    stats_opened?: number;
+    stats_clicked?: number;
+    stats_bounced?: number;
     scheduled_at: string | null;
     created_at: string;
     updated_at: string;
@@ -53,10 +60,37 @@ interface Campaign {
     settings: Record<string, unknown>;
 }
 
+interface CampaignAnalytics {
+    period?: string;
+    timeline?: CampaignTimelinePoint[];
+    totals: {
+        sent: number;
+        delivered: number;
+        opened: number;
+        clicked: number;
+        bounced: number;
+        complained: number;
+        open_rate: number;
+        click_rate: number;
+        bounce_rate: number;
+        delivery_rate: number;
+    };
+    engagement?: {
+        unique_opens: number;
+        total_opens: number;
+        unique_clicks: number;
+        total_clicks: number;
+        hard_bounces: number;
+        soft_bounces: number;
+        complaints: number;
+    };
+}
+
 export default function CampaignDetailPage() {
     const { id } = useParams<{ id: string }>();
     const router = useRouter();
     const [campaign, setCampaign] = useState<Campaign | null>(null);
+    const [analytics, setAnalytics] = useState<CampaignAnalytics | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [previewContent, setPreviewContent] = useState<string | null>(null);
     const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -77,6 +111,13 @@ export default function CampaignDetailPage() {
         try {
             const response = await api.get(`/campaigns/${id}/`);
             setCampaign(response.data);
+            try {
+                const analyticsRes = await api.get(`/campaigns/${id}/analytics/`);
+                setAnalytics(analyticsRes.data);
+            } catch {
+                // Analytics may be empty for drafts
+                setAnalytics(null);
+            }
         } catch (error) {
             console.error(error);
             toast.error('Failed to fetch campaign details');
@@ -282,7 +323,7 @@ export default function CampaignDetailPage() {
                             <Button variant="outline" onClick={handleScheduleClick}>
                                 <Calendar className="mr-2 h-4 w-4" /> Schedule
                             </Button>
-                            <Button onClick={handleLaunchClick} className="bg-gradient-to-r from-primary to-blue-600 hover:opacity-90">
+                            <Button onClick={handleLaunchClick} className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90">
                                 <Play className="mr-2 h-4 w-4" /> Launch Campaign
                             </Button>
                         </>
@@ -302,6 +343,46 @@ export default function CampaignDetailPage() {
                     )}
                 </div>
             </div>
+
+            {analytics && (analytics.totals.sent > 0 || (analytics.timeline && analytics.timeline.length > 0)) && (
+                <div className="grid gap-6 lg:grid-cols-3">
+                    <Card className="lg:col-span-2">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <LineChart className="h-5 w-5 text-primary" />
+                                Performance Over Time
+                            </CardTitle>
+                            <CardDescription>
+                                Deliveries, opens, clicks, and bounces per {analytics.period === 'hour' ? 'hour' : 'day'}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <CampaignTimelineChart
+                                data={(analytics.timeline ?? []) as CampaignTimelinePoint[]}
+                                granularity={analytics.period === 'hour' ? 'hour' : 'day'}
+                            />
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Filter className="h-5 w-5 text-primary" />
+                                Engagement Funnel
+                            </CardTitle>
+                            <CardDescription>Where recipients drop off</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <EngagementFunnelChart
+                                sent={analytics.totals.sent}
+                                delivered={analytics.totals.delivered}
+                                opened={analytics.totals.opened}
+                                clicked={analytics.totals.clicked}
+                            />
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             <div className="grid gap-6 md:grid-cols-3">
                 <div className="md:col-span-2 space-y-6">
@@ -395,7 +476,41 @@ export default function CampaignDetailPage() {
                                     <span className="text-muted-foreground">Recipients</span>
                                     <span className="font-bold">{campaign.stats_total_recipients || 0}</span>
                                 </div>
-                                {/* Add more stats here if available from API */}
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Sent</span>
+                                    <span className="font-bold">{analytics?.totals?.sent ?? campaign.stats_sent ?? 0}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Open rate</span>
+                                    <span className="font-bold text-purple-600 dark:text-purple-400">{analytics?.totals?.open_rate ?? 0}%</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Click rate</span>
+                                    <span className="font-bold text-purple-600">{analytics?.totals?.click_rate ?? 0}%</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Bounce rate</span>
+                                    <span className="font-bold text-orange-600">{analytics?.totals?.bounce_rate ?? 0}%</span>
+                                </div>
+                                {analytics?.engagement && (
+                                    <>
+                                        <div className="border-t pt-2 mt-2" />
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-muted-foreground">Total opens</span>
+                                            <span className="font-bold">{analytics.engagement.total_opens}</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-muted-foreground">Total clicks</span>
+                                            <span className="font-bold">{analytics.engagement.total_clicks}</span>
+                                        </div>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-muted-foreground">Hard / soft bounces</span>
+                                            <span className="font-bold">
+                                                {analytics.engagement.hard_bounces} / {analytics.engagement.soft_bounces}
+                                            </span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -436,7 +551,7 @@ export default function CampaignDetailPage() {
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction 
                             onClick={handleLaunchConfirm}
-                            className="bg-gradient-to-r from-primary to-blue-600 hover:opacity-90"
+                            className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90"
                         >
                             Launch Now
                         </AlertDialogAction>
@@ -482,7 +597,7 @@ export default function CampaignDetailPage() {
                         <Button 
                             onClick={handleDuplicateConfirm}
                             disabled={!duplicateName.trim()}
-                            className="bg-gradient-to-r from-primary to-blue-600 hover:opacity-90"
+                            className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90"
                         >
                             Duplicate
                         </Button>

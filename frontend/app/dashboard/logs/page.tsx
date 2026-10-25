@@ -59,6 +59,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { DeliveryStatusChart } from '@/components/dashboard/charts/delivery-status-chart';
+import { ProviderPerformanceChart } from '@/components/dashboard/charts/provider-performance-chart';
+import { PieChart } from 'lucide-react';
 
 interface EmailDeliveryLog {
   id: string;
@@ -90,12 +93,24 @@ interface Analytics {
   engagement_rates: {
     open_rate: number;
     click_rate: number;
+    bounce_rate?: number;
+    complaint_rate?: number;
+    delivery_rate?: number;
+    unique_opens?: number;
+    total_opens?: number;
+    unique_clicks?: number;
+    total_clicks?: number;
+    hard_bounces?: number;
+    soft_bounces?: number;
+    complaints?: number;
   };
   provider_stats: Array<{
     provider: string;
     total: number;
     delivery_rate: number;
     bounce_rate: number;
+    open_rate?: number;
+    click_rate?: number;
   }>;
 }
 
@@ -338,10 +353,10 @@ export default function DeliveryLogsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Open Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-500" />
+            <TrendingUp className="h-4 w-4 text-purple-600 dark:text-purple-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
               {isAnalyticsLoading ? '...' : `${analytics?.engagement_rates?.open_rate || 0}%`}
             </div>
           </CardContent>
@@ -356,9 +371,99 @@ export default function DeliveryLogsPage() {
             <div className="text-2xl font-bold text-purple-600">
               {isAnalyticsLoading ? '...' : `${analytics?.engagement_rates?.click_rate || 0}%`}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {analytics?.engagement_rates?.total_clicks ?? 0} total clicks
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Bounce Rate</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">
+              {isAnalyticsLoading ? '...' : `${analytics?.engagement_rates?.bounce_rate || 0}%`}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Hard {analytics?.engagement_rates?.hard_bounces ?? 0} · Soft {analytics?.engagement_rates?.soft_bounces ?? 0}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Complaint Rate</CardTitle>
+            <XCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {isAnalyticsLoading ? '...' : `${analytics?.engagement_rates?.complaint_rate || 0}%`}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {analytics?.engagement_rates?.complaints ?? 0} complaints
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Unique Opens</CardTitle>
+            <Eye className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+              {isAnalyticsLoading ? '...' : (analytics?.engagement_rates?.unique_opens ?? 0)}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {analytics?.engagement_rates?.total_opens ?? 0} total opens
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Delivery Rate</CardTitle>
+            <Send className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {isAnalyticsLoading ? '...' : `${analytics?.engagement_rates?.delivery_rate || 0}%`}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Performance Charts */}
+      {!isAnalyticsLoading && analytics && analytics.total_emails > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PieChart className="h-5 w-5" />
+                Delivery Status Breakdown
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DeliveryStatusChart data={analytics.delivery_rates} />
+            </CardContent>
+          </Card>
+
+          {analytics.provider_stats && analytics.provider_stats.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Provider Comparison
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ProviderPerformanceChart data={analytics.provider_stats} />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Provider Stats */}
       {analytics?.provider_stats && analytics.provider_stats.length > 0 && (
@@ -638,12 +743,12 @@ export default function DeliveryLogsPage() {
 
               {/* Engagement Stats */}
               <div className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-lg bg-blue-50 dark:bg-blue-950 p-4">
-                  <div className="text-2xl font-bold text-blue-600">{selectedLog.open_count}</div>
+                <div className="rounded-lg bg-purple-50 dark:bg-purple-950 p-4">
+                  <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{selectedLog.open_count}</div>
                   <div className="text-sm text-muted-foreground">Opens</div>
                 </div>
-                <div className="rounded-lg bg-purple-50 dark:bg-purple-950 p-4">
-                  <div className="text-2xl font-bold text-purple-600">{selectedLog.click_count}</div>
+                <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950 p-4">
+                  <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{selectedLog.click_count}</div>
                   <div className="text-sm text-muted-foreground">Clicks</div>
                 </div>
                 <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4">

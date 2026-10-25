@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { AxiosError } from 'axios';
 import { Mail, Eye, EyeOff, ArrowRight, Loader2, Building2, User } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { BrandLogo } from '@/components/brand-logo';
 
 const signupSchema = z.object({
   first_name: z.string().min(1, 'First name is required'),
@@ -62,8 +63,11 @@ export default function SignupPage() {
       const response = await api.post('/auth/signup/', payload);
       
       if (response.data.data?.access) {
-         const { access, refresh, user } = response.data.data;
-         login(access, refresh, user);
+         const { access, refresh, user, organization } = response.data.data;
+         login(access, refresh, {
+           ...user,
+           organization: organization ?? user.organization,
+         });
          toast.success('Account created successfully');
       } else {
          toast.success('Account created! Please check your email to verify.');
@@ -101,11 +105,8 @@ export default function SignupPage() {
       </div>
       
       {/* Logo */}
-      <Link href="/" className="mb-8 flex items-center gap-2.5 font-bold text-2xl transition-transform hover:scale-105">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-bg shadow-lg shadow-primary/25">
-          <Mail className="h-5 w-5 text-white" />
-        </div>
-        <span>EmailCampaign</span>
+      <Link href="/" className="mb-8 transition-transform hover:scale-105">
+        <BrandLogo size={40} wordmarkClassName="text-2xl" priority />
       </Link>
       
       <Card className="w-full max-w-lg border-border/50 shadow-xl shadow-black/5 backdrop-blur-sm">

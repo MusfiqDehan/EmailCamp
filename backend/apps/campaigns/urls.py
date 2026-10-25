@@ -14,6 +14,7 @@ All endpoints use APIView for explicit control.
 """
 
 from django.urls import path
+from django_ses.views import SESEventWebhookView
 # Import campaign views
 from .views import (
     # Contact List Views
@@ -44,7 +45,6 @@ from .views import (
     OrganizationStatsView,
     
     # Public Views
-    UnsubscribeView,
     GDPRForgetView,
     PublicContactSubscribeView,
     
@@ -107,6 +107,51 @@ from .views.notification_views import (
 
 # Import push notification views
 from .views.push_views import PushSubscriptionViewSet
+
+# Import tracking + mailbox views
+from .views.tracking_views import TrackOpenView, TrackClickView
+from .views.domain_views import (
+    SendingDomainListCreateView,
+    SendingDomainDetailView,
+    SendingDomainDNSRecordsView,
+    SendingDomainVerifyNowView,
+    SenderEmailListCreateView,
+    SenderEmailDetailView,
+)
+from .views.admin_package_views import (
+    AdminPackageListCreateView,
+    AdminPackageDetailView,
+    AdminOrganizationAssignPackageView,
+    AdminOrganizationLimitOverridesView,
+    AdminOrganizationDomainFeatureView,
+    AdminOrganizationDomainUsageView,
+    AdminOrganizationDomainCreateView,
+    AdminOrganizationSenderEmailCreateView,
+    AdminSendingDomainListView,
+    AdminSendingDomainSuspendView,
+    AdminSendingDomainReactivateView,
+    AdminSenderEmailSuspendView,
+    AdminSenderEmailReactivateView,
+)
+from .views.package_views import (
+    PackageCatalogView,
+    PackageUpgradeView,
+)
+from .views.mailbox_views import (
+    EmailAccountListCreateView,
+    EmailAccountDetailView,
+    EmailAccountSyncView,
+    MailboxMessageListView,
+    MailboxMessageDetailView,
+    MailboxComposeView,
+    MailboxStatsView,
+)
+from .views.provider_webhooks import (
+    SendGridEventWebhookView,
+    BrevoEventWebhookView,
+    SendGridInboundParseView,
+)
+from .views.unsubscribe_views import UnsubscribeView
 
 # Import template operation views
 from .views.template_operations import (
@@ -235,6 +280,10 @@ urlpatterns = [
     path('config/<uuid:pk>/reset-usage/', OrganizationEmailConfigurationResetUsageView.as_view(), name='org-email-config-reset-usage'),
     path('config/<uuid:pk>/verify-domain/', OrganizationEmailConfigurationVerifyDomainView.as_view(), name='org-email-config-verify-domain'),
     path('config/usage-stats/', OrganizationEmailConfigurationUsageStatsView.as_view(), name='org-email-config-usage-stats'),
+
+    # Self-service package catalog / upgrade (sidebar "Upgrade to Pro")
+    path('packages/catalog/', PackageCatalogView.as_view(), name='package-catalog'),
+    path('packages/upgrade/', PackageUpgradeView.as_view(), name='package-upgrade'),
     
     # Organization Email Providers (links org to shared/platform providers)
     path('providers/', OrganizationEmailProviderListCreateView.as_view(), name='org-email-provider-list-create'),
@@ -250,6 +299,14 @@ urlpatterns = [
     path('shared-providers/', EmailProviderListCreateView.as_view(), name='shared-email-provider-list'),
     path('shared-providers/<uuid:pk>/', EmailProviderDetailView.as_view(), name='shared-email-provider-detail'),
     path('shared-providers/<uuid:pk>/health-check/', EmailProviderHealthCheckView.as_view(), name='shared-email-provider-health-check'),
+
+    # Sending Domains (AWS SES identities) + dynamic sender emails
+    path('domains/', SendingDomainListCreateView.as_view(), name='sending-domain-list-create'),
+    path('domains/<uuid:pk>/', SendingDomainDetailView.as_view(), name='sending-domain-detail'),
+    path('domains/<uuid:pk>/dns-records/', SendingDomainDNSRecordsView.as_view(), name='sending-domain-dns-records'),
+    path('domains/<uuid:pk>/verify/', SendingDomainVerifyNowView.as_view(), name='sending-domain-verify'),
+    path('sender-emails/', SenderEmailListCreateView.as_view(), name='sender-email-list-create'),
+    path('sender-emails/<uuid:pk>/', SenderEmailDetailView.as_view(), name='sender-email-detail'),
     
     # ========================================================================
     # SECTION 3: AUTOMATION RULES
@@ -286,6 +343,26 @@ urlpatterns = [
     # Email Actions
     path('actions/', EmailActionListView.as_view(), name='email-action-list'),
     path('actions/<uuid:pk>/', EmailActionDetailView.as_view(), name='email-action-detail'),
+
+    # First-party open/click tracking (public)
+    path('track/open/<path:token>', TrackOpenView.as_view(), name='track-open'),
+    path('track/click/<path:token>/', TrackClickView.as_view(), name='track-click'),
+
+    # Mailbox (Gmail-like send + receive)
+    path('mailbox/accounts/', EmailAccountListCreateView.as_view(), name='mailbox-account-list'),
+    path('mailbox/accounts/<uuid:pk>/', EmailAccountDetailView.as_view(), name='mailbox-account-detail'),
+    path('mailbox/accounts/<uuid:pk>/sync/', EmailAccountSyncView.as_view(), name='mailbox-account-sync'),
+    path('mailbox/messages/', MailboxMessageListView.as_view(), name='mailbox-message-list'),
+    path('mailbox/messages/<uuid:pk>/', MailboxMessageDetailView.as_view(), name='mailbox-message-detail'),
+    path('mailbox/compose/', MailboxComposeView.as_view(), name='mailbox-compose'),
+    path('mailbox/stats/', MailboxStatsView.as_view(), name='mailbox-stats'),
+
+    # AWS SES SNS webhook (bounce/complaint/delivery/open/click/received)
+    path('webhooks/ses/', SESEventWebhookView.as_view(), name='ses-event-webhook'),
+    # SendGrid / Brevo event + inbound webhooks
+    path('webhooks/sendgrid/', SendGridEventWebhookView.as_view(), name='sendgrid-event-webhook'),
+    path('webhooks/sendgrid/inbound/', SendGridInboundParseView.as_view(), name='sendgrid-inbound'),
+    path('webhooks/brevo/', BrevoEventWebhookView.as_view(), name='brevo-event-webhook'),
     
     # ========================================================================
     # SECTION 5: SMS & WHATSAPP AUTOMATION
@@ -325,7 +402,26 @@ urlpatterns = [
     path('admin/organizations/<uuid:pk>/suspend/', AdminOrganizationSuspendView.as_view(), name='admin-org-suspend'),
     path('admin/organizations/<uuid:pk>/unsuspend/', AdminOrganizationUnsuspendView.as_view(), name='admin-org-unsuspend'),
     path('admin/organizations/<uuid:pk>/upgrade-plan/', AdminOrganizationUpgradePlanView.as_view(), name='admin-org-upgrade-plan'),
-    
+
+    # Admin Packages (DB-backed plan catalog)
+    path('admin/packages/', AdminPackageListCreateView.as_view(), name='admin-package-list-create'),
+    path('admin/packages/<uuid:pk>/', AdminPackageDetailView.as_view(), name='admin-package-detail'),
+
+    # Admin per-organization package / limits / feature control
+    path('admin/organizations/<uuid:pk>/assign-package/', AdminOrganizationAssignPackageView.as_view(), name='admin-org-assign-package'),
+    path('admin/organizations/<uuid:pk>/limit-overrides/', AdminOrganizationLimitOverridesView.as_view(), name='admin-org-limit-overrides'),
+    path('admin/organizations/<uuid:pk>/domain-feature/', AdminOrganizationDomainFeatureView.as_view(), name='admin-org-domain-feature'),
+    path('admin/organizations/<uuid:pk>/domain-usage/', AdminOrganizationDomainUsageView.as_view(), name='admin-org-domain-usage'),
+    path('admin/organizations/<uuid:pk>/domains/', AdminOrganizationDomainCreateView.as_view(), name='admin-org-domain-create'),
+    path('admin/organizations/<uuid:pk>/sender-emails/', AdminOrganizationSenderEmailCreateView.as_view(), name='admin-org-sender-email-create'),
+
+    # Admin cross-tenant domain / sender-email control
+    path('admin/domains/', AdminSendingDomainListView.as_view(), name='admin-domain-list'),
+    path('admin/domains/<uuid:pk>/suspend/', AdminSendingDomainSuspendView.as_view(), name='admin-domain-suspend'),
+    path('admin/domains/<uuid:pk>/reactivate/', AdminSendingDomainReactivateView.as_view(), name='admin-domain-reactivate'),
+    path('admin/sender-emails/<uuid:pk>/suspend/', AdminSenderEmailSuspendView.as_view(), name='admin-sender-email-suspend'),
+    path('admin/sender-emails/<uuid:pk>/reactivate/', AdminSenderEmailReactivateView.as_view(), name='admin-sender-email-reactivate'),
+
     # Admin Platform Stats
     path('admin/stats/', AdminPlatformStatsView.as_view(), name='admin-platform-stats'),
     
