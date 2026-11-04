@@ -1,4 +1,4 @@
-# 📧 Email Campaign Management Platform
+# 📧 EmailCamp - Email Campaign Management Platform
 
 A multi-tenant, AI-assisted email (and SMS) campaign management platform. Organizations manage contacts, build reusable templates, run bulk campaigns across multiple providers (AWS SES, Gmail/Outlook SMTP), and get real-time delivery notifications — with generative AI template creation and an agentic, natural-language contact-management assistant built in.
 
