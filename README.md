@@ -2,7 +2,7 @@
 
 A multi-tenant, AI-assisted email (and SMS) campaign management platform. Organizations manage contacts, build reusable templates, run bulk campaigns across multiple providers (AWS SES, Gmail/Outlook SMTP), and get real-time delivery notifications — with generative AI template creation and an agentic, natural-language contact-management assistant built in.
 
-**Live Demo:** https://emailcampaign.musfiqdehan.com
+**Live Demo:** ![Link](https://emailcampaign.musfiqdehan.com)
 
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
