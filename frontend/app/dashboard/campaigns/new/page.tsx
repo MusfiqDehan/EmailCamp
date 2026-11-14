@@ -121,7 +121,7 @@ export default function NewCampaignPage() {
       subject,
       preview_text: previewText,
       email_template: selectedTemplate,
-      contact_lists: selectedLists,
+      contact_list_ids: selectedLists,
       email_provider: selectedProvider,
       tags: tags.split(',').map(tag => tag.trim()).filter(tag => tag !== ''),
       settings: {
@@ -129,14 +129,35 @@ export default function NewCampaignPage() {
         track_clicks: trackClicks,
         include_unsubscribe: includeUnsubscribe
       },
-      email_variables: variables
+      email_variables: {
+        ...variables,
+        organization_name: variables.company_name || undefined,
+      }
     };
   };
 
+  const validateWizardStep = (targetStep: number): string | null => {
+    if (targetStep === 1) {
+      if (!name.trim()) return 'Please enter a campaign name before continuing.';
+      if (!subject.trim()) return 'Please enter an email subject line before continuing.';
+    } else if (targetStep === 2) {
+      if (!selectedTemplate) return 'Please select an email template.';
+    } else if (targetStep === 3) {
+      if (selectedLists.length === 0) return 'Please select at least one contact list.';
+    } else if (targetStep === 4) {
+      if (!selectedProvider) return 'Please select an email provider.';
+    }
+    return null;
+  };
+
   const handleCreate = async () => {
-    if (!name || !subject || !selectedTemplate || selectedLists.length === 0 || !selectedProvider) {
-      toast.error('Please complete all required fields');
-      return;
+    for (const s of [1, 2, 3, 4]) {
+      const err = validateWizardStep(s);
+      if (err) {
+        toast.error(err);
+        setStep(s);
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -154,7 +175,14 @@ export default function NewCampaignPage() {
     }
   };
 
-  const nextStep = () => setStep(s => Math.min(s + 1, 6));
+  const nextStep = () => {
+    const err = validateWizardStep(step);
+    if (err) {
+      toast.error(err);
+      return;
+    }
+    setStep(s => Math.min(s + 1, 6));
+  };
   const prevStep = () => setStep(s => Math.max(s - 1, 1));
 
   const currentTemplate = templates.find(t => t.id === selectedTemplate);
@@ -174,9 +202,18 @@ export default function NewCampaignPage() {
       </div>
 
       {/* Progress Steps */}
-      <div className="flex justify-between items-center px-10 py-4 bg-card rounded-xl border shadow-sm">
+      <div className="flex justify-between items-center px-4 sm:px-10 py-4 bg-card rounded-xl border shadow-sm overflow-x-auto gap-2">
         {[1, 2, 3, 4, 5, 6].map((s) => (
-          <div key={s} className="flex flex-col items-center gap-2">
+          <button
+            type="button"
+            key={s}
+            onClick={() => {
+              if (s < step) setStep(s);
+              else if (s === step + 1) nextStep();
+            }}
+            disabled={s > step + 1}
+            className="flex flex-col items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shrink-0"
+          >
             <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium transition-all duration-300 ${step >= s ? 'bg-gradient-to-br from-primary to-purple-600 text-white shadow-lg shadow-primary/30' : 'bg-muted text-muted-foreground'
               }`}>
               {step > s ? <Check className="h-4 w-4" /> : s}
@@ -184,7 +221,7 @@ export default function NewCampaignPage() {
             <span className="text-xs text-muted-foreground text-center">
               {s === 1 ? 'Details' : s === 2 ? 'Content' : s === 3 ? 'Audience' : s === 4 ? 'Settings' : s === 5 ? 'Variables' : 'Review'}
             </span>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -248,7 +285,7 @@ export default function NewCampaignPage() {
                 <Label className="whitespace-nowrap">Select Template*</Label>
                 <Select value={selectedTemplate} onValueChange={handleTemplateSelect}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Chose an email template" />
+                    <SelectValue placeholder="Choose an email template" />
                   </SelectTrigger>
                   <SelectContent>
                     {templates.map(t => (
