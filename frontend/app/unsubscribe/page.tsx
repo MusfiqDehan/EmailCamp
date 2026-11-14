@@ -103,24 +103,23 @@ function UnsubscribeContent() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      {/* Atmospheric background */}
+    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
+      {/* Brand-consistent atmospheric background */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(1200px 600px at 10% -10%, rgba(37, 99, 235, 0.18), transparent 55%),' +
-            'radial-gradient(900px 500px at 90% 0%, rgba(14, 165, 233, 0.14), transparent 50%),' +
-            'linear-gradient(180deg, #f8fafc 0%, #eef2ff 45%, #f8fafc 100%)',
+            'radial-gradient(1200px 600px at 10% -10%, hsl(var(--primary) / 0.16), transparent 55%),' +
+            'radial-gradient(900px 500px at 90% 0%, hsl(var(--primary) / 0.1), transparent 50%)',
         }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        className="pointer-events-none absolute inset-0 opacity-[0.3]"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(15,23,42,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.04) 1px, transparent 1px)',
+            'linear-gradient(hsl(var(--border) / 0.4) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border) / 0.4) 1px, transparent 1px)',
           backgroundSize: '48px 48px',
           maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 75%)',
         }}
@@ -128,19 +127,19 @@ function UnsubscribeContent() {
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-lg flex-col px-4 py-10 sm:py-16">
         <header className="mb-10 flex items-center justify-between animate-[fadeIn_0.6s_ease-out]">
-          <BrandLogo size={32} wordmarkClassName="text-base text-slate-900" />
-          <span className="text-xs font-medium tracking-wide text-slate-500 uppercase">
+          <BrandLogo size={32} wordmarkClassName="text-base text-foreground" />
+          <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             Email preferences
           </span>
         </header>
 
         <main className="flex flex-1 flex-col justify-center">
           <div
-            className="rounded-2xl border border-white/60 bg-white/80 p-8 shadow-[0_24px_80px_-32px_rgba(15,23,42,0.35)] backdrop-blur-md animate-[riseIn_0.7s_ease-out]"
+            className="rounded-2xl border border-border/60 bg-card/85 p-8 shadow-2xl backdrop-blur-md animate-[riseIn_0.7s_ease-out]"
           >
             {state === 'loading' && (
-              <div className="flex flex-col items-center gap-4 py-10 text-slate-600">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+              <div className="flex flex-col items-center gap-4 py-10 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="text-sm">Checking your subscription…</p>
               </div>
             )}
@@ -148,21 +147,21 @@ function UnsubscribeContent() {
             {(state === 'confirm') && info && (
               <div className="space-y-6">
                 <div className="space-y-3">
-                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
+                  <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                     <MailX className="h-6 w-6" />
                   </div>
-                  <p className="text-sm font-medium text-slate-500">{greeting}</p>
-                  <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+                  <p className="text-sm font-medium text-muted-foreground">{greeting}</p>
+                  <h1 className="text-3xl font-semibold tracking-tight text-foreground">
                     {info.organization_name || 'EmailCampaign'}
                   </h1>
-                  <p className="text-base leading-relaxed text-slate-600">
-                    Unsubscribe <span className="font-medium text-slate-900">{info.email}</span> from
+                  <p className="text-base leading-relaxed text-muted-foreground">
+                    Unsubscribe <span className="font-medium text-foreground">{info.email}</span> from
                     future marketing emails. You can resubscribe anytime by contacting the sender.
                   </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="reason" className="text-slate-700">
+                  <Label htmlFor="reason" className="text-foreground">
                     Reason (optional)
                   </Label>
                   <Textarea
@@ -171,7 +170,7 @@ function UnsubscribeContent() {
                     placeholder="Too many emails, content not relevant, …"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    className="resize-none bg-white"
+                    className="resize-none bg-background"
                   />
                 </div>
 
@@ -179,7 +178,7 @@ function UnsubscribeContent() {
                   <Button
                     onClick={handleConfirm}
                     disabled={submitting}
-                    className="flex-1 bg-slate-900 text-white hover:bg-slate-800"
+                    className="flex-1 gradient-bg border-0 text-white"
                   >
                     {submitting ? (
                       <>
@@ -194,7 +193,7 @@ function UnsubscribeContent() {
                   </Button>
                 </div>
 
-                <p className="flex items-start gap-2 text-xs text-slate-500">
+                <p className="flex items-start gap-2 text-xs text-muted-foreground">
                   <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   We will stop sending campaign emails to this address. Transactional messages (like
                   password resets) may still be delivered when required.
@@ -204,15 +203,15 @@ function UnsubscribeContent() {
 
             {(state === 'done' || state === 'already') && info && (
               <div className="space-y-5 text-center animate-[fadeIn_0.5s_ease-out]">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="h-7 w-7" />
                 </div>
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                     {state === 'already' ? 'Already unsubscribed' : 'You are unsubscribed'}
                   </h1>
-                  <p className="text-slate-600">
-                    <span className="font-medium text-slate-900">{info.email}</span> will no longer
+                  <p className="text-muted-foreground">
+                    <span className="font-medium text-foreground">{info.email}</span> will no longer
                     receive marketing emails
                     {info.organization_name ? ` from ${info.organization_name}` : ''}.
                   </p>
@@ -225,14 +224,14 @@ function UnsubscribeContent() {
 
             {state === 'error' && (
               <div className="space-y-5 text-center">
-                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-destructive/15 text-destructive">
                   <AlertCircle className="h-7 w-7" />
                 </div>
                 <div className="space-y-2">
-                  <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                     Link unavailable
                   </h1>
-                  <p className="text-slate-600">{errorMessage}</p>
+                  <p className="text-muted-foreground">{errorMessage}</p>
                 </div>
                 <Button asChild variant="outline">
                   <Link href="/">Go home</Link>
@@ -242,7 +241,7 @@ function UnsubscribeContent() {
           </div>
         </main>
 
-        <footer className="mt-10 text-center text-xs text-slate-500 animate-[fadeIn_0.9s_ease-out]">
+        <footer className="mt-10 text-center text-xs text-muted-foreground animate-[fadeIn_0.9s_ease-out]">
           Preference center · Powered by EmailCampaign
         </footer>
       </div>
