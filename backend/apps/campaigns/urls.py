@@ -96,6 +96,9 @@ from .views import (
     ContactAgentView
 )
 
+# Import state machine introspection view (DX/AX)
+from .views.state_machine_views import StateMachineCatalogView
+
 # Import notification views
 from .views.notification_views import (
     NotificationListView,
@@ -441,6 +444,8 @@ urlpatterns = [
     path('stats/', AutomationStatsView.as_view(), name='automation-stats'),
     path('dispatches/', EmailDispatchReportView.as_view(), name='email-dispatch-report'),
     path('health/', DebugAutoHealthCheckView.as_view(), name='health-check'),
+    path('state-machines/', StateMachineCatalogView.as_view(), name='state-machine-catalog'),
+    path('state-machines/<str:name>/', StateMachineCatalogView.as_view(), name='state-machine-detail'),
     
     # ========================================================================
     # SECTION 9: TEMPLATE VARIABLES
