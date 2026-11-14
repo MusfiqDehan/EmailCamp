@@ -14,7 +14,7 @@ export interface EmailTemplate {
   is_global: boolean;
   is_draft: boolean;
   is_published: boolean;
-  approval_status: 'draft' | 'pending' | 'approved' | 'rejected';
+  approval_status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'draft' | 'pending' | 'approved' | 'rejected';
   version: number;
   version_notes?: string;
   source_template_id?: string;
@@ -41,7 +41,9 @@ export function getCategoryInfo(category: string) {
  * Get approval status display information
  */
 export function getApprovalStatusInfo(status: string) {
-  const statusKey = status.toUpperCase() as keyof typeof APPROVAL_STATUS;
+  const upper = (status || 'DRAFT').toUpperCase();
+  const normalized = upper === 'PENDING' ? 'PENDING_APPROVAL' : upper;
+  const statusKey = normalized as keyof typeof APPROVAL_STATUS;
   return APPROVAL_STATUS[statusKey] || APPROVAL_STATUS.DRAFT;
 }
 
