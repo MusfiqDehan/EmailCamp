@@ -42,36 +42,36 @@ export default function AdminDashboardPage() {
       title: 'Organizations',
       value: stats.total_organizations,
       icon: Building2,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100 dark:bg-purple-950/40',
+      color: 'text-purple-600 dark:text-purple-400',
+      bgColor: 'bg-purple-500/10',
     },
     {
       title: 'Global Templates',
       value: stats.total_global_templates,
       icon: FileText,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100',
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bgColor: 'bg-emerald-500/10',
     },
     {
       title: 'Template Usage',
       value: stats.total_template_usage,
       icon: Users,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100',
+      color: 'text-purple-600 dark:text-purple-400',
+      bgColor: 'bg-purple-500/10',
     },
     {
       title: 'Pending Approvals',
       value: stats.pending_approvals,
       icon: CheckSquare,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-100',
+      color: 'text-amber-600 dark:text-amber-400',
+      bgColor: 'bg-amber-500/10',
     },
   ];
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Platform Administration</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Platform Administration</h1>
         <p className="text-muted-foreground">
           Manage organizations, global templates, and approvals
         </p>
