@@ -277,7 +277,9 @@ def check_domain_verification(domain, actor=None):
 
 def retry_domain_verification(domain, actor=None):
     """Reset a FAILED domain to pending and re-check immediately."""
-    if domain.status == SendingDomain.STATUS_FAILED:
+    from ..state_machines import SENDING_DOMAIN_STATE_MACHINE
+
+    if SENDING_DOMAIN_STATE_MACHINE.can_perform_action(domain.status, 'retry'):
         domain.status = SendingDomain.STATUS_PENDING_VERIFICATION
         domain.save(update_fields=['status', 'updated_at'])
     return check_domain_verification(domain, actor=actor)
@@ -300,6 +302,15 @@ def delete_domain(domain, actor=None):
 
 
 def suspend_domain(domain, reason='', actor=None):
+    from ..state_machines import SENDING_DOMAIN_STATE_MACHINE, InvalidStateTransition
+
+    try:
+        SENDING_DOMAIN_STATE_MACHINE.validate_transition(
+            domain.status, action='suspend', target_state=SendingDomain.STATUS_SUSPENDED
+        )
+    except InvalidStateTransition as exc:
+        raise ValidationError(str(exc))
+
     domain.previous_status = domain.status
     domain.status = SendingDomain.STATUS_SUSPENDED
     domain.suspension_reason = reason or 'Suspended by platform admin'
@@ -315,7 +326,16 @@ def suspend_domain(domain, reason='', actor=None):
 
 
 def reactivate_domain(domain, actor=None):
-    domain.status = domain.previous_status or SendingDomain.STATUS_PENDING_VERIFICATION
+    from ..state_machines import SENDING_DOMAIN_STATE_MACHINE, InvalidStateTransition
+
+    try:
+        target = SENDING_DOMAIN_STATE_MACHINE.validate_transition(
+            domain.status, action='reactivate', instance=domain
+        )
+    except InvalidStateTransition as exc:
+        raise ValidationError(str(exc))
+
+    domain.status = target
     domain.previous_status = ''
     domain.suspension_reason = ''
     domain.save(update_fields=['previous_status', 'status', 'suspension_reason', 'updated_at'])
