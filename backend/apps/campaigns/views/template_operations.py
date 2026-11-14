@@ -293,14 +293,26 @@ class EmailTemplateSubmitForApprovalView(CustomResponseMixin, APIView):
                 id=pk,
                 is_global=True,
                 is_deleted=False,
-                is_draft=True
             )
         except EmailTemplate.DoesNotExist:
-            raise NotFound("Draft template not found")
-        
-        if template.approval_status != EmailTemplate.ApprovalStatus.DRAFT:
-            raise ValidationError("Template must be in DRAFT status")
-        
+            raise NotFound("Template not found")
+
+        from ..state_machines import TEMPLATE_APPROVAL_STATE_MACHINE, InvalidStateTransition
+        try:
+            TEMPLATE_APPROVAL_STATE_MACHINE.validate_transition(
+                template.approval_status,
+                action='submit_approval',
+                target_state=EmailTemplate.ApprovalStatus.PENDING_APPROVAL,
+            )
+        except InvalidStateTransition as exc:
+            raise ValidationError(str(exc))
+
+        if TemplateApprovalRequest.objects.filter(
+            template=template,
+            status=TemplateApprovalRequest.ApprovalStatus.PENDING,
+        ).exists():
+            raise ValidationError("This template already has a pending approval request")
+
         approval_notes = request.data.get('approval_notes', '')
         
         # Calculate changes if there's a parent version
@@ -319,8 +331,9 @@ class EmailTemplateSubmitForApprovalView(CustomResponseMixin, APIView):
                 status=TemplateApprovalRequest.ApprovalStatus.PENDING
             )
             
-            # Update template status
+            # Update template status cleanly
             template.approval_status = EmailTemplate.ApprovalStatus.PENDING_APPROVAL
+            template.is_draft = True
             template.submitted_for_approval_at = timezone.now()
             template.save()
             
