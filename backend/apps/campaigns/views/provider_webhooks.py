@@ -85,7 +85,9 @@ def _apply_bounce(log: EmailDeliveryLog, payload: Dict[str, Any], hard: bool = T
 
 
 def _apply_complaint(log: EmailDeliveryLog, payload: Dict[str, Any]):
-    log.delivery_status = 'COMPLAINED'
+    from ..state_machines import resolve_next_delivery_status
+
+    log.delivery_status = resolve_next_delivery_status(log.delivery_status, 'COMPLAINED')
     log.bounce_type = 'COMPLAINT'
     log.bounce_reason = payload.get('reason') or 'Spam complaint'
     log.is_spam = True
@@ -140,11 +142,15 @@ class SendGridEventWebhookView(PublicCORSMixin, APIView):
             return
 
         if event_type in {'delivered'}:
-            if log and log.delivery_status in {'QUEUED', 'SENT', 'FAILED'}:
-                log.delivery_status = 'DELIVERED'
-                log.delivered_at = timezone.now()
-                log.record_event('delivered', event)
-                log.save()
+            from ..state_machines import resolve_next_delivery_status
+
+            if log:
+                next_status = resolve_next_delivery_status(log.delivery_status, 'DELIVERED')
+                if next_status != log.delivery_status:
+                    log.delivery_status = next_status
+                    log.delivered_at = timezone.now()
+                    log.record_event('delivered', event)
+                    log.save()
         elif event_type in {'open'}:
             if log:
                 _apply_open(log, event)
@@ -162,9 +168,11 @@ class SendGridEventWebhookView(PublicCORSMixin, APIView):
             if log:
                 _apply_complaint(log, event)
         elif event_type in {'unsubscribe', 'group_unsubscribe'}:
+            from ..state_machines import resolve_next_delivery_status
+
             _apply_unsubscribe(email, 'SendGrid unsubscribe')
             if log:
-                log.delivery_status = 'UNSUBSCRIBED'
+                log.delivery_status = resolve_next_delivery_status(log.delivery_status, 'UNSUBSCRIBED')
                 log.record_event('unsubscribed', event)
                 log.save()
 
@@ -211,11 +219,15 @@ class BrevoEventWebhookView(PublicCORSMixin, APIView):
         log = _find_log(message_id, email)
 
         if event_type in {'delivered', 'delivery'}:
-            if log and log.delivery_status in {'QUEUED', 'SENT', 'FAILED'}:
-                log.delivery_status = 'DELIVERED'
-                log.delivered_at = timezone.now()
-                log.record_event('delivered', payload)
-                log.save()
+            from ..state_machines import resolve_next_delivery_status
+
+            if log:
+                next_status = resolve_next_delivery_status(log.delivery_status, 'DELIVERED')
+                if next_status != log.delivery_status:
+                    log.delivery_status = next_status
+                    log.delivered_at = timezone.now()
+                    log.record_event('delivered', payload)
+                    log.save()
         elif event_type in {'opened', 'unique_opened', 'open'}:
             if log:
                 _apply_open(log, payload)
@@ -230,9 +242,11 @@ class BrevoEventWebhookView(PublicCORSMixin, APIView):
             if log:
                 _apply_complaint(log, payload)
         elif event_type in {'unsubscribed', 'unsubscribe'}:
+            from ..state_machines import resolve_next_delivery_status
+
             _apply_unsubscribe(email, 'Brevo unsubscribe')
             if log:
-                log.delivery_status = 'UNSUBSCRIBED'
+                log.delivery_status = resolve_next_delivery_status(log.delivery_status, 'UNSUBSCRIBED')
                 log.record_event('unsubscribed', payload)
                 log.save()
         else:
