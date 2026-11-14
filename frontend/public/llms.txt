@@ -24,6 +24,8 @@ EmailCampaign equips marketing teams, sales development representatives, recruit
 - [Custom Domains & DNS](https://emailcampaign.musfiqdehan.com/docs#domains): DKIM tokens, SPF TXT records, DMARC policies, and MX configuration.
 - [Deliverability Best Practices](https://emailcampaign.musfiqdehan.com/docs#deliverability): Reputation protection, IP warmup, list hygiene, and spam filter avoidance.
 - [API Reference](https://emailcampaign-api.musfiqdehan.com/api/v1/schemas/swagger-ui/): Interactive OpenAPI / Swagger UI documentation for backend REST APIs.
+- [State Machine Registry API](https://emailcampaign-api.musfiqdehan.com/api/v1/campaigns/state-machines/): Machine-readable lifecycle states, allowed transitions, actor permissions, and Mermaid state graphs for campaigns, delivery logs, queues, domains, templates, contacts, providers, and mailboxes.
+- [AI Contact Agent Capabilities](https://emailcampaign-api.musfiqdehan.com/api/v1/campaigns/ai/agent/contacts/): GET capability discovery and POST natural-language contact & list execution endpoint.
 - [Full LLM Context](https://emailcampaign.musfiqdehan.com/llms-full.txt): Comprehensive technical guide, documentation text, and feature architecture for language models.
 
 ## Optional & Related Services
