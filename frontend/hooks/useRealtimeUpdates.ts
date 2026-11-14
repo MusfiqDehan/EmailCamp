@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Cookies from 'js-cookie';
+import type { RealtimeConnectionState } from '@/config/state-machines';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8001';
 
@@ -25,7 +26,7 @@ export interface RealtimeMessage {
 export type CampaignStatusUpdateCallback = (update: CampaignStatusUpdate) => void;
 
 export const useRealtimeUpdates = () => {
-  const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [connectionState, setConnectionState] = useState<RealtimeConnectionState>('disconnected');
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -33,7 +34,9 @@ export const useRealtimeUpdates = () => {
   const callbacksRef = useRef<Map<string, CampaignStatusUpdateCallback>>(new Map());
   
   const MAX_RECONNECT_ATTEMPTS = 5;
-  const RECONNECT_DELAY = 3001; // 3 seconds
+  const RECONNECT_DELAY = 3000; // 3 seconds
+
+  const isConnected = connectionState === 'connected';
 
   // Register a callback for campaign status updates
   const onCampaignStatusUpdate = useCallback((id: string, callback: CampaignStatusUpdateCallback) => {
@@ -71,16 +74,17 @@ export const useRealtimeUpdates = () => {
       // Get auth token from cookies
       const accessToken = Cookies.get('access_token');
       if (!accessToken) {
-        console.error('No access token found, cannot connect to WebSocket');
+        setConnectionState('disconnected');
         return;
       }
+
+      setConnectionState(reconnectAttemptsRef.current > 0 ? 'reconnecting' : 'connecting');
 
       // Create WebSocket connection with auth token
       const ws = new WebSocket(`${WS_URL}/ws/notifications/?token=${accessToken}`);
       
       ws.onopen = () => {
-        console.log('Realtime updates WebSocket connected');
-        setIsConnected(true);
+        setConnectionState('connected');
         setError(null);
         reconnectAttemptsRef.current = 0;
       };
@@ -88,10 +92,8 @@ export const useRealtimeUpdates = () => {
       ws.onmessage = (event) => {
         try {
           const message: RealtimeMessage = JSON.parse(event.data);
-          console.log('Realtime WebSocket message received:', message);
 
           if (message.type === 'campaign_status_update') {
-            // Campaign status update received
             broadcastCampaignUpdate(message.data as CampaignStatusUpdate);
           }
         } catch (err) {
@@ -99,46 +101,41 @@ export const useRealtimeUpdates = () => {
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('Realtime WebSocket error:', error);
+      ws.onerror = () => {
+        setConnectionState('error');
         setError('WebSocket connection error');
       };
 
       ws.onclose = (event) => {
-        console.log('Realtime WebSocket disconnected', event.code, event.reason);
-        setIsConnected(false);
-
         // Attempt to reconnect if not a manual close
         if (event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttemptsRef.current += 1;
-          console.log(`Reconnecting... Attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS}`);
-          
+          setConnectionState('reconnecting');
           reconnectTimeoutRef.current = setTimeout(() => {
             connectWebSocket();
           }, RECONNECT_DELAY);
         } else if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+          setConnectionState('error');
           setError('Failed to connect to real-time service. Please refresh the page.');
+        } else {
+          setConnectionState('disconnected');
         }
       };
 
       wsRef.current = ws;
     } catch (err) {
       console.error('Failed to create WebSocket connection:', err);
+      setConnectionState('error');
       setError('Failed to establish real-time connection');
     }
   }, [broadcastCampaignUpdate]);
 
   // Initial WebSocket setup
   useEffect(() => {
-    console.log('useRealtimeUpdates: Initializing...');
-    
-    // Connect to WebSocket for real-time updates
     connectWebSocket();
 
     // Cleanup on unmount
     return () => {
-      console.log('useRealtimeUpdates: Cleaning up...');
-      
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -149,11 +146,13 @@ export const useRealtimeUpdates = () => {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty dependency array - only run once on mount
+  }, []);
 
   return {
     isConnected,
+    connectionState,
     error,
+    reconnect: connectWebSocket,
     onCampaignStatusUpdate
   };
 };
