@@ -283,21 +283,13 @@ class ContactToggleStatusView(APIView):
             is_deleted=False
         )
         
-        # Toggle status
+        # Toggle status via state machine methods so is_active and list stats stay consistent
         if contact.status == 'ACTIVE':
-            contact.status = 'UNSUBSCRIBED'
-            contact.is_active = False
+            contact.unsubscribe('Manually deactivated by user')
             message = 'Contact deactivated'
         else:
-            contact.status = 'ACTIVE'
-            contact.is_active = True
+            contact.activate()
             message = 'Contact activated'
-        
-        contact.save(update_fields=['status', 'is_active', 'updated_at'])
-        
-        # Update list statistics
-        for contact_list in contact.lists.all():
-            contact_list.update_stats()
         
         serializer = ContactSerializer(contact, context={'request': request})
         return Response({
@@ -555,11 +547,18 @@ class CampaignLaunchView(APIView):
             return Response({
                 'message': 'Campaign launched successfully',
                 'status': campaign.status,
-                'total_recipients': campaign.stats_total_recipients
+                'total_recipients': campaign.stats_total_recipients,
+                'state_info': campaign.get_state_payload(),
             })
         except Exception as e:
+            state_info = campaign.get_state_payload()
             return Response(
-                {'error': str(e)},
+                {
+                    'error': str(e),
+                    'current_state': campaign.status,
+                    'allowed_actions': state_info['allowed_actions'],
+                    'recovery_hint': state_info.get('recovery_hint') or None,
+                },
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -589,25 +588,29 @@ class CampaignScheduleView(APIView):
             is_deleted=False
         )
         
-        if campaign.status not in ['DRAFT']:
-            return Response(
-                {'error': f'Cannot schedule campaign with status {campaign.status}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
         serializer = CampaignScheduleSerializer(data=request.data)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        campaign.scheduled_at = serializer.validated_data['scheduled_at']
-        campaign.status = 'SCHEDULED'
-        campaign.calculate_total_recipients()
-        campaign.save()
+
+        try:
+            campaign.schedule(serializer.validated_data['scheduled_at'])
+        except Exception as e:
+            state_info = campaign.get_state_payload()
+            return Response(
+                {
+                    'error': str(e),
+                    'current_state': campaign.status,
+                    'allowed_actions': state_info['allowed_actions'],
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         return Response({
             'message': 'Campaign scheduled successfully',
+            'status': campaign.status,
             'scheduled_at': campaign.scheduled_at,
-            'total_recipients': campaign.stats_total_recipients
+            'total_recipients': campaign.stats_total_recipients,
+            'state_info': campaign.get_state_payload(),
         })
 
 
@@ -638,9 +641,18 @@ class CampaignPauseView(APIView):
         
         try:
             campaign.pause()
-            return Response({'message': 'Campaign paused', 'status': campaign.status})
+            return Response({
+                'message': 'Campaign paused',
+                'status': campaign.status,
+                'state_info': campaign.get_state_payload(),
+            })
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            state_info = campaign.get_state_payload()
+            return Response({
+                'error': str(e),
+                'current_state': campaign.status,
+                'allowed_actions': state_info['allowed_actions'],
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CampaignResumeView(APIView):
@@ -670,9 +682,18 @@ class CampaignResumeView(APIView):
         
         try:
             campaign.resume()
-            return Response({'message': 'Campaign resumed', 'status': campaign.status})
+            return Response({
+                'message': 'Campaign resumed',
+                'status': campaign.status,
+                'state_info': campaign.get_state_payload(),
+            })
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            state_info = campaign.get_state_payload()
+            return Response({
+                'error': str(e),
+                'current_state': campaign.status,
+                'allowed_actions': state_info['allowed_actions'],
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CampaignCancelView(APIView):
@@ -702,19 +723,29 @@ class CampaignCancelView(APIView):
         
         try:
             campaign.cancel()
-            return Response({'message': 'Campaign cancelled', 'status': campaign.status})
+            return Response({
+                'message': 'Campaign cancelled',
+                'status': campaign.status,
+                'state_info': campaign.get_state_payload(),
+            })
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            state_info = campaign.get_state_payload()
+            return Response({
+                'error': str(e),
+                'current_state': campaign.status,
+                'allowed_actions': state_info['allowed_actions'],
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CampaignResetView(APIView):
     """
-    Reset a stuck campaign back to DRAFT status.
+    Reset a stuck or inactive campaign back to DRAFT status.
     
     POST /campaigns/{id}/reset/
     
     Use this when a campaign is stuck in SENDING status 
-    (e.g., Celery task failed or server restarted).
+    (e.g., Celery task failed or server restarted), or to rework a
+    SCHEDULED / PAUSED / CANCELLED / FAILED campaign.
     """
     permission_classes = [IsAuthenticated]
     throttle_classes = [OrganizationRateThrottle]
@@ -735,23 +766,27 @@ class CampaignResetView(APIView):
             is_deleted=False
         )
         
-        if campaign.status in ['SENT']:
+        if campaign.status == 'SENT':
             return Response(
                 {'error': 'Cannot reset a completed campaign. Use /duplicate/ instead.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Reset to draft
-        old_status = campaign.status
-        campaign.status = 'DRAFT'
-        campaign.started_at = None
-        campaign.scheduled_at = None
-        campaign.save(update_fields=['status', 'started_at', 'scheduled_at'])
+
+        try:
+            old_status = campaign.reset()
+        except Exception as e:
+            state_info = campaign.get_state_payload()
+            return Response({
+                'error': str(e),
+                'current_state': campaign.status,
+                'allowed_actions': state_info['allowed_actions'],
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         return Response({
             'message': f'Campaign reset from {old_status} to DRAFT',
             'status': campaign.status,
-            'previous_status': old_status
+            'previous_status': old_status,
+            'state_info': campaign.get_state_payload(),
         })
 
 
