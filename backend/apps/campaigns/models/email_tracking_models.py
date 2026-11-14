@@ -343,64 +343,72 @@ class EmailDeliveryLog(BaseModel):
         self.save(update_fields=['event_history'])
     
     def mark_opened(self, user_agent: str = None, ip_address: str = None):
-        """Mark email as opened."""
+        """Mark email as opened without regressing suppression or click states."""
         from django.utils import timezone
-        
-        if self.delivery_status not in ['OPENED', 'CLICKED']:
-            self.delivery_status = 'OPENED'
+        from ..state_machines import resolve_next_delivery_status
+
+        next_status = resolve_next_delivery_status(self.delivery_status, 'OPENED')
+        if self.delivery_status not in ['OPENED', 'CLICKED', 'BOUNCED', 'COMPLAINED', 'UNSUBSCRIBED']:
+            self.delivery_status = next_status
+            if not self.opened_at:
+                self.opened_at = timezone.now()
+        elif not self.opened_at:
             self.opened_at = timezone.now()
-        
+
         self.open_count += 1
-        
+
         if user_agent:
             self.user_agent = user_agent
         if ip_address:
             self.ip_address = ip_address
-        
+
         self.record_event('opened', {'user_agent': user_agent, 'ip': ip_address})
         self.save()
-        
+
         # Update contact stats if linked
         if self.contact:
             self.contact.record_email_opened()
-    
+
     def mark_clicked(self, url: str = None, user_agent: str = None, ip_address: str = None):
-        """Mark email as clicked."""
+        """Mark email as clicked without overwriting bounce/complaint/unsubscribe suppressions."""
         from django.utils import timezone
-        
+        from ..state_machines import resolve_next_delivery_status
+
         is_first_click = self.click_count == 0
-        
-        self.delivery_status = 'CLICKED'
-        self.clicked_at = timezone.now()
+
+        self.delivery_status = resolve_next_delivery_status(self.delivery_status, 'CLICKED')
+        if not self.clicked_at:
+            self.clicked_at = timezone.now()
         self.click_count += 1
-        
+
         if is_first_click:
             self.unique_click_count += 1
-        
+
         if user_agent:
             self.user_agent = user_agent
         if ip_address:
             self.ip_address = ip_address
-        
+
         self.record_event('clicked', {'url': url, 'user_agent': user_agent, 'ip': ip_address})
         self.save()
-        
+
         # Update contact stats if linked
         if self.contact:
             self.contact.record_email_clicked()
-    
+
     def mark_bounced(self, bounce_type: str, reason: str = ""):
-        """Mark email as bounced."""
+        """Mark email as bounced while respecting complaint precedence."""
         from django.utils import timezone
-        
-        self.delivery_status = 'BOUNCED'
+        from ..state_machines import resolve_next_delivery_status
+
+        self.delivery_status = resolve_next_delivery_status(self.delivery_status, 'BOUNCED')
         self.bounce_type = bounce_type
         self.bounce_reason = reason
         self.bounced_at = timezone.now()
-        
+
         self.record_event('bounced', {'type': bounce_type, 'reason': reason})
         self.save()
-        
+
         # Update contact status if linked
         if self.contact:
             self.contact.mark_bounced(reason, bounce_type)
