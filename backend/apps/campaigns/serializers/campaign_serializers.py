@@ -679,6 +679,16 @@ class CampaignSerializer(serializers.ModelSerializer):
     click_rate = serializers.FloatField(read_only=True)
     bounce_rate = serializers.FloatField(read_only=True)
     delivery_rate = serializers.FloatField(read_only=True)
+    allowed_actions = serializers.SerializerMethodField()
+
+    def get_allowed_actions(self, obj):
+        from ..state_machines import CAMPAIGN_STATE_MACHINE
+        return CAMPAIGN_STATE_MACHINE.get_allowed_transitions(
+            obj.status,
+            actor='user',
+            endpoint_params={'id': str(obj.id)},
+            instance=obj,
+        )
     
     class Meta:
         model = Campaign
@@ -689,7 +699,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             'email_template', 'email_template_name',
             'contact_lists', 'contact_list_ids',
             'email_provider', 'email_provider_name',
-            'status', 'scheduled_at', 'started_at', 'completed_at',
+            'status', 'allowed_actions', 'scheduled_at', 'started_at', 'completed_at',
             'stats_total_recipients', 'stats_sent', 'stats_delivered',
             'stats_opened', 'stats_clicked', 'stats_bounced',
             'stats_complained', 'stats_unsubscribed', 'stats_failed',
@@ -701,7 +711,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             'is_active', 'is_published', 'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'organization', 'status', 'started_at', 'completed_at',
+            'id', 'organization', 'status', 'allowed_actions', 'started_at', 'completed_at',
             'stats_total_recipients', 'stats_sent', 'stats_delivered',
             'stats_opened', 'stats_clicked', 'stats_bounced',
             'stats_complained', 'stats_unsubscribed', 'stats_failed',
@@ -993,11 +1003,21 @@ class CampaignListSerializer(serializers.ModelSerializer):
     
     open_rate = serializers.FloatField(read_only=True)
     click_rate = serializers.FloatField(read_only=True)
+    allowed_actions = serializers.SerializerMethodField()
+
+    def get_allowed_actions(self, obj):
+        from ..state_machines import CAMPAIGN_STATE_MACHINE
+        return CAMPAIGN_STATE_MACHINE.get_allowed_transitions(
+            obj.status,
+            actor='user',
+            endpoint_params={'id': str(obj.id)},
+            instance=obj,
+        )
     
     class Meta:
         model = Campaign
         fields = [
-            'id', 'name', 'status', 'scheduled_at', 'started_at', 'completed_at',
+            'id', 'name', 'status', 'allowed_actions', 'scheduled_at', 'started_at', 'completed_at',
             'stats_total_recipients', 'stats_sent', 'stats_delivered',
             'stats_opened', 'stats_clicked',
             'open_rate', 'click_rate',
