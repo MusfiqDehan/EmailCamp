@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { AxiosError } from 'axios';
-import { Send, Loader2, Sparkles, X, Mic, MicOff } from 'lucide-react';
+import { Send, Loader2, Sparkles, X, Mic, MicOff, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '@/config/axios';
 import { toast } from 'sonner';
 import { cn } from '@/config/utils';
+import { AGENT_STATE_META, type AgentSessionState } from '@/config/state-machines';
+import { Badge } from '@/components/ui/badge';
 
 type SpeechRecognitionErrorEventLike = {
     error: string;
@@ -44,42 +46,57 @@ declare global {
 
 export function FloatingAgentInput() {
     const [prompt, setPrompt] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [agentState, setAgentState] = useState<AgentSessionState>('idle');
+    const [statusMessage, setStatusMessage] = useState<string>('');
     const [isOpen, setIsOpen] = useState(true);
-    const [isListening, setIsListening] = useState(false);
     const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
     const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const resetTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const isLoading = agentState === 'processing';
+    const isListening = agentState === 'listening';
+
+    useEffect(() => {
+        return () => {
+            if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        };
+    }, []);
 
     const handleSubmit = async (e?: React.FormEvent, overridePrompt?: string) => {
         if (e) e.preventDefault();
         const activePrompt = overridePrompt ?? prompt;
 
-        console.log('handleSubmit called with prompt:', activePrompt);
-
-        if (!activePrompt.trim()) {
-            console.log('Prompt is empty, skipping submission');
+        if (!activePrompt.trim() || agentState === 'processing') {
             return;
         }
 
-        if (isLoading) {
-            console.log('Submission already in progress, skipping');
-            return;
-        }
+        if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+        setAgentState('processing');
+        setStatusMessage('');
 
-        setIsLoading(true);
         try {
-            console.log('Initiating API call to /campaigns/ai/agent/contacts/');
             const response = await api.post('/campaigns/ai/agent/contacts/', { prompt: activePrompt });
-            toast.success(response.data.message || 'Action completed successfully');
+            const msg = response.data.message || 'Action completed successfully';
+            toast.success(msg);
             setPrompt('');
-            // Dispatch custom event for dynamic updates
-            window.dispatchEvent(new CustomEvent('agent-action-completed'));
+            setAgentState('success');
+            setStatusMessage(msg);
+            window.dispatchEvent(new CustomEvent('agent-action-completed', { detail: response.data }));
+            resetTimerRef.current = setTimeout(() => {
+                setAgentState('idle');
+                setStatusMessage('');
+            }, 3000);
         } catch (error: unknown) {
-            console.error('Agent error:', error);
             const axiosError = error as AxiosError<{ error?: string }>;
-            toast.error(axiosError.response?.data?.error || 'Something went wrong with the agent');
-        } finally {
-            setIsLoading(false);
+            const errMsg = axiosError.response?.data?.error || 'Something went wrong with the agent';
+            toast.error(errMsg);
+            setAgentState('error');
+            setStatusMessage(errMsg);
+            resetTimerRef.current = setTimeout(() => {
+                setAgentState('idle');
+                setStatusMessage('');
+            }, 4000);
         }
     };
 
@@ -110,22 +127,19 @@ export function FloatingAgentInput() {
         recognition.lang = 'en-US';
 
         recognition.onstart = () => {
-            console.log('Speech recognition started');
-            setIsListening(true);
+            setAgentState('listening');
             toast.info('Listening...');
         };
 
         recognition.onerror = (event: SpeechRecognitionErrorEventLike) => {
-            console.error('Speech recognition error:', event.error);
-            setIsListening(false);
+            setAgentState((prev) => (prev === 'listening' ? 'idle' : prev));
             if (event.error !== 'no-speech') {
                 toast.error(`Speech error: ${event.error}`);
             }
         };
 
         recognition.onend = () => {
-            console.log('Speech recognition ended');
-            setIsListening(false);
+            setAgentState((prev) => (prev === 'listening' ? 'idle' : prev));
         };
 
         recognition.onresult = (event: SpeechRecognitionEventLike) => {
@@ -143,9 +157,7 @@ export function FloatingAgentInput() {
                 }
 
                 // Set new timer for 5 seconds of silence
-                console.log('Starting 5s silence timer for:', fullTranscript);
                 silenceTimerRef.current = setTimeout(() => {
-                    console.log('Silence period ended, auto-submitting...');
                     stopListening();
                     if (fullTranscript.trim()) {
                         handleSubmit(undefined, fullTranscript);
@@ -160,7 +172,7 @@ export function FloatingAgentInput() {
         } catch (err) {
             console.error('Failed to start recognition:', err);
             toast.error('Could not start microphone. Please check permissions.');
-            setIsListening(false);
+            setAgentState('idle');
         }
     };
 
@@ -171,7 +183,7 @@ export function FloatingAgentInput() {
         if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current);
         }
-        setIsListening(false);
+        setAgentState((prev) => (prev === 'listening' ? 'idle' : prev));
     };
 
     // Cleanup on unmount
@@ -210,7 +222,6 @@ export function FloatingAgentInput() {
                         type="text"
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                         placeholder="Ask AI agent to manage contacts... (e.g. 'Add john@gmail.com to vip list')"
                         aria-label="AI agent prompt"
                         className="flex-1 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground/70 py-3 pr-2"
@@ -274,10 +285,21 @@ export function FloatingAgentInput() {
                 <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-purple-500/20 to-indigo-500/20 rounded-3xl blur-lg opacity-0 group-focus-within:opacity-100 transition duration-500 -z-10"></div>
             </div>
             
-            {/* Hint text */}
-            <p className="text-center text-xs text-muted-foreground/60 mt-2 opacity-0 group-focus-within:opacity-100 transition-opacity duration-300">
-                Press Enter to send • Voice input supported
-            </p>
+            {/* Agent state indicator & hint */}
+            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                {agentState !== 'idle' ? (
+                    <Badge variant={AGENT_STATE_META[agentState].variant} className="gap-1.5 shadow-sm">
+                        {agentState === 'success' && <CheckCircle2 className="h-3 w-3" />}
+                        {agentState === 'error' && <AlertCircle className="h-3 w-3" />}
+                        {agentState === 'processing' && <Loader2 className="h-3 w-3 animate-spin" />}
+                        <span>{statusMessage || AGENT_STATE_META[agentState].label}</span>
+                    </Badge>
+                ) : (
+                    <span className="text-muted-foreground/70">
+                        Press Enter to send • Voice input supported • Supports contacts &amp; lists
+                    </span>
+                )}
+            </div>
         </div>
     );
 }
