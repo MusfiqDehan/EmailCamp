@@ -5,6 +5,7 @@ import api from '@/config/axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import {
   Search,
   Filter,
@@ -271,11 +272,13 @@ export default function DeliveryLogsPage() {
     switch (status) {
       case 'DELIVERED': return 'success';
       case 'SENT': return 'info';
-      case 'PENDING': return 'warning';
       case 'QUEUED': return 'secondary';
+      case 'PENDING': return 'warning';
       case 'FAILED': return 'destructive';
       case 'BOUNCED': return 'destructive';
-      case 'OPENED': return 'purple';
+      case 'COMPLAINED': return 'destructive';
+      case 'UNSUBSCRIBED': return 'warning';
+      case 'OPENED': return 'info';
       case 'CLICKED': return 'purple';
       default: return 'secondary';
     }
@@ -285,10 +288,12 @@ export default function DeliveryLogsPage() {
     switch (status) {
       case 'DELIVERED': return <CheckCircle className="h-4 w-4" />;
       case 'SENT': return <Send className="h-4 w-4" />;
-      case 'PENDING': return <Clock className="h-4 w-4" />;
+      case 'PENDING':
       case 'QUEUED': return <Clock className="h-4 w-4" />;
       case 'FAILED': return <XCircle className="h-4 w-4" />;
-      case 'BOUNCED': return <AlertTriangle className="h-4 w-4" />;
+      case 'BOUNCED':
+      case 'COMPLAINED':
+      case 'UNSUBSCRIBED': return <AlertTriangle className="h-4 w-4" />;
       default: return <Mail className="h-4 w-4" />;
     }
   };
@@ -573,10 +578,7 @@ export default function DeliveryLogsPage() {
                         <div className="truncate max-w-[300px]">{log.subject}</div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getStatusVariant(log.delivery_status)} className="gap-1">
-                          {getStatusIcon(log.delivery_status)}
-                          {log.delivery_status}
-                        </Badge>
+                        <StatusBadge domain="delivery_log" status={log.delivery_status} />
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <div className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -696,10 +698,7 @@ export default function DeliveryLogsPage() {
             <div className="space-y-6">
               {/* Status Badge */}
               <div className="flex items-center gap-2">
-                <Badge variant={getStatusVariant(selectedLog.delivery_status)} className="gap-1 text-sm">
-                  {getStatusIcon(selectedLog.delivery_status)}
-                  {selectedLog.delivery_status}
-                </Badge>
+                <StatusBadge domain="delivery_log" status={selectedLog.delivery_status} />
                 {selectedLog.trigger_type && (
                   <Badge variant="outline">{selectedLog.trigger_type}</Badge>
                 )}
