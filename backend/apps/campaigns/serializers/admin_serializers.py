@@ -30,21 +30,53 @@ class AdminEmailTemplateSerializer(EmailTemplateSerializer):
         return super().create(validated_data)
     
     def update(self, instance, validated_data):
-        """Handle admin updates including approval status changes."""
-        # If approval status is changing to APPROVED, set approved_by
+        """Handle admin updates including synchronized approval status transitions."""
+        from django.utils import timezone
+        from ..models import TemplateApprovalRequest
+        from ..state_machines import TEMPLATE_APPROVAL_STATE_MACHINE, InvalidStateTransition
+
         if 'approval_status' in validated_data:
             new_status = validated_data['approval_status']
+            try:
+                TEMPLATE_APPROVAL_STATE_MACHINE.validate_transition(
+                    instance.approval_status,
+                    target_state=new_status,
+                    allow_idempotent=True,
+                )
+            except InvalidStateTransition as exc:
+                raise serializers.ValidationError({'approval_status': str(exc)})
+
+            request = self.context.get('request')
+            reviewer = request.user if request and request.user.is_authenticated else None
+            now = timezone.now()
+
             if new_status == EmailTemplate.ApprovalStatus.APPROVED:
-                request = self.context.get('request')
-                if request and request.user:
-                    instance.approved_by = request.user
-                    from django.utils import timezone
-                    instance.approved_at = timezone.now()
-                # Also mark as not draft when approved
+                if reviewer:
+                    instance.approved_by = reviewer
+                    instance.approved_at = now
                 validated_data['is_draft'] = False
             elif new_status == EmailTemplate.ApprovalStatus.DRAFT:
                 validated_data['is_draft'] = True
-        
+            elif new_status == EmailTemplate.ApprovalStatus.REJECTED:
+                validated_data['is_draft'] = True
+
+            template = super().update(instance, validated_data)
+
+            # Synchronize any open pending approval requests so both state machines agree
+            if new_status in (
+                EmailTemplate.ApprovalStatus.APPROVED,
+                EmailTemplate.ApprovalStatus.REJECTED,
+            ):
+                TemplateApprovalRequest.objects.filter(
+                    template=template,
+                    status=TemplateApprovalRequest.ApprovalStatus.PENDING,
+                ).update(
+                    status=new_status,
+                    reviewed_by=reviewer,
+                    reviewed_at=now,
+                )
+            return template
+
         return super().update(instance, validated_data)
 
 
