@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Dialog,
   DialogContent,
@@ -127,14 +129,25 @@ export default function AdminPackagesPage() {
     }
   };
 
-  const handleDelete = async (pkg: Package) => {
-    if (!confirm(`Delete package '${pkg.name}'?`)) return;
+  const [pkgToDelete, setPkgToDelete] = useState<Package | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = (pkg: Package) => {
+    setPkgToDelete(pkg);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!pkgToDelete) return;
+    setIsDeleting(true);
     try {
-      await deletePackage(pkg.id);
-      toast.success(`Package '${pkg.name}' deleted`);
+      await deletePackage(pkgToDelete.id);
+      toast.success(`Package '${pkgToDelete.name}' deleted`);
+      setPkgToDelete(null);
       await load();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to delete package'));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -143,18 +156,16 @@ export default function AdminPackagesPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Packages</h1>
-          <p className="text-muted-foreground">
-            Define subscription tiers — limits and features for each tenant. Empty number = unlimited.
-          </p>
-        </div>
-        <Button onClick={openCreate}>
-          <PackagePlus className="h-4 w-4 mr-2" /> New package
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Packages"
+        description="Define subscription tiers — limits and features for each tenant. Empty number = unlimited."
+        actions={
+          <Button onClick={openCreate}>
+            <PackagePlus className="h-4 w-4 mr-2" /> New package
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -290,6 +301,19 @@ export default function AdminPackagesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(pkgToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setPkgToDelete(null);
+        }}
+        title="Delete Package"
+        description={`Delete package "${pkgToDelete?.name}"? Organizations assigned to this tier should be moved first.`}
+        confirmLabel="Delete Package"
+        variant="destructive"
+        busy={isDeleting}
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   );
 }
