@@ -38,6 +38,7 @@ class EmailTemplateSerializer(serializers.ModelSerializer):
     source_template_name = serializers.SerializerMethodField()
     source_template_version = serializers.SerializerMethodField()
     has_newer_version = serializers.SerializerMethodField()
+    allowed_actions = serializers.SerializerMethodField()
     
     # Read-only tracking fields
     usage_count = serializers.IntegerField(read_only=True)
@@ -56,14 +57,23 @@ class EmailTemplateSerializer(serializers.ModelSerializer):
             # Versioning fields
             'version', 'version_notes', 'parent_version', 'has_newer_version',
             # Approval workflow fields
-            'is_draft', 'approval_status', 'submitted_for_approval_at',
+            'is_draft', 'approval_status', 'allowed_actions', 'submitted_for_approval_at',
             'approved_by', 'approved_at',
             # Standard fields
             'is_active', 'is_published', 'created_at', 'updated_at'
         ]
         read_only_fields = (
             'id', 'organization', 'created_at', 'updated_at', 'usage_count',
-            'duplicated_by', 'approved_by', 'approved_at', 'submitted_for_approval_at'
+            'duplicated_by', 'approved_by', 'approved_at', 'submitted_for_approval_at',
+            'allowed_actions',
+        )
+
+    def get_allowed_actions(self, obj):
+        from ..state_machines import TEMPLATE_APPROVAL_STATE_MACHINE
+        return TEMPLATE_APPROVAL_STATE_MACHINE.get_allowed_transitions(
+            obj.approval_status,
+            endpoint_params={'id': str(obj.id), 'request_id': str(obj.id)},
+            instance=obj,
         )
     
     def get_source_template_name(self, obj):
