@@ -1,11 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Globe, Loader2, PauseCircle, PlayCircle } from 'lucide-react';
+import { Loader2, PauseCircle, PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Select,
   SelectContent,
@@ -36,6 +38,7 @@ export default function AdminDomainsPage() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [domainToSuspend, setDomainToSuspend] = useState<AdminDomain | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,12 +56,13 @@ export default function AdminDomainsPage() {
     load();
   }, [load]);
 
-  const handleSuspend = async (domain: AdminDomain) => {
-    const reason = prompt(`Reason for suspending ${domain.domain}?`) ?? '';
-    setBusyId(domain.id);
+  const handleSuspendConfirm = async (reason?: string) => {
+    if (!domainToSuspend) return;
+    setBusyId(domainToSuspend.id);
     try {
-      await suspendDomain(domain.id, reason);
-      toast.success(`${domain.domain} suspended`);
+      await suspendDomain(domainToSuspend.id, reason ?? '');
+      toast.success(`${domainToSuspend.domain} suspended`);
+      setDomainToSuspend(null);
       await load();
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, 'Failed to suspend domain'));
@@ -81,29 +85,25 @@ export default function AdminDomainsPage() {
   };
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Globe className="h-6 w-6" /> All Sending Domains
-          </h1>
-          <p className="text-muted-foreground">
-            Cross-tenant view of every registered domain. Suspension blocks sends immediately.
-          </p>
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[220px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s === 'ALL' ? 'All statuses' : s.replaceAll('_', ' ')}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="All Sending Domains"
+        description="Cross-tenant view of every registered domain. Suspension blocks sends immediately while preserving previous state."
+        actions={
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s === 'ALL' ? 'All statuses' : s.replaceAll('_', ' ')}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -133,9 +133,7 @@ export default function AdminDomainsPage() {
                     <TableCell className="font-medium">{domain.domain}</TableCell>
                     <TableCell>{domain.organization_name}</TableCell>
                     <TableCell>
-                      <Badge variant={domain.status === 'VERIFIED' ? 'default' : domain.status === 'SUSPENDED' ? 'destructive' : 'secondary'}>
-                        {domain.status}
-                      </Badge>
+                      <StatusBadge domain="sending_domain" status={domain.status} />
                     </TableCell>
                     <TableCell className="text-sm">{domain.ownership_mode}</TableCell>
                     <TableCell>{domain.sender_email_count}</TableCell>
@@ -154,7 +152,7 @@ export default function AdminDomainsPage() {
                           variant="outline"
                           size="sm"
                           disabled={busyId === domain.id}
-                          onClick={() => handleSuspend(domain)}
+                          onClick={() => setDomainToSuspend(domain)}
                         >
                           <PauseCircle className="h-4 w-4 mr-1" /> Suspend
                         </Button>
@@ -167,6 +165,22 @@ export default function AdminDomainsPage() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={Boolean(domainToSuspend)}
+        onOpenChange={(open) => {
+          if (!open) setDomainToSuspend(null);
+        }}
+        title={`Suspend ${domainToSuspend?.domain ?? 'Domain'}`}
+        description="Suspending this domain immediately prevents campaigns and mailbox replies from sending through it. Its previous status is preserved for reactivation."
+        confirmLabel="Suspend Domain"
+        variant="destructive"
+        requireReason
+        reasonLabel="Suspension reason (optional)"
+        reasonPlaceholder="e.g., High bounce rate or policy violation"
+        busy={Boolean(domainToSuspend && busyId === domainToSuspend.id)}
+        onConfirm={handleSuspendConfirm}
+      />
     </div>
   );
 }
