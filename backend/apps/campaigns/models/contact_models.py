@@ -219,38 +219,54 @@ class Contact(BaseModel):
             return 0.0
         return (self.emails_clicked / self.emails_sent) * 100
     
+    def activate(self):
+        """Activate or resubscribe a contact."""
+        from ..state_machines import CONTACT_STATE_MACHINE
+
+        if CONTACT_STATE_MACHINE.can_transition(self.status, 'ACTIVE', allow_idempotent=True):
+            self.status = 'ACTIVE'
+            self.is_active = True
+            self.save(update_fields=['status', 'is_active', 'updated_at'])
+
+            for contact_list in self.lists.all():
+                contact_list.update_stats()
+
     def unsubscribe(self, reason: str = ""):
-        """Mark contact as unsubscribed."""
+        """Mark contact as unsubscribed and keep is_active synchronized."""
         self.status = 'UNSUBSCRIBED'
+        self.is_active = False
         self.unsubscribed_at = timezone.now()
         if reason:
             if not self.custom_fields:
                 self.custom_fields = {}
             self.custom_fields['unsubscribe_reason'] = reason
-        self.save(update_fields=['status', 'unsubscribed_at', 'custom_fields'])
+        self.save(update_fields=['status', 'is_active', 'unsubscribed_at', 'custom_fields'])
         
         # Update list statistics
         for contact_list in self.lists.all():
             contact_list.update_stats()
     
     def mark_bounced(self, reason: str = "", bounce_type: str = "HARD"):
-        """Mark contact as bounced."""
-        self.status = 'BOUNCED'
+        """Mark contact as bounced and keep is_active synchronized."""
+        if self.status != 'COMPLAINED':
+            self.status = 'BOUNCED'
+        self.is_active = False
         self.bounce_count += 1
         self.last_bounce_at = timezone.now()
         self.bounce_reason = reason
-        self.save(update_fields=['status', 'bounce_count', 'last_bounce_at', 'bounce_reason'])
+        self.save(update_fields=['status', 'is_active', 'bounce_count', 'last_bounce_at', 'bounce_reason'])
         
         # Update list statistics
         for contact_list in self.lists.all():
             contact_list.update_stats()
     
     def mark_complained(self):
-        """Mark contact as complained (spam report)."""
+        """Mark contact as complained (spam report) and keep is_active synchronized."""
         self.status = 'COMPLAINED'
+        self.is_active = False
         self.complaint_count += 1
         self.last_complaint_at = timezone.now()
-        self.save(update_fields=['status', 'complaint_count', 'last_complaint_at'])
+        self.save(update_fields=['status', 'is_active', 'complaint_count', 'last_complaint_at'])
         
         # Update list statistics
         for contact_list in self.lists.all():
