@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -32,7 +31,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useToast } from '@/components/ui/use-toast';
+import { toast } from 'sonner';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { PageHeader } from '@/components/ui/page-header';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   DnsRecord,
   DomainLimits,
@@ -44,25 +46,10 @@ import {
 } from '@/services/domains';
 import { getApiErrorMessage } from '@/config/api-error';
 
-const STATUS_STYLES: Record<string, { label: string; className: string }> = {
-  VERIFIED: { label: 'Verified', className: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' },
-  PENDING_DNS: { label: 'Pending DNS', className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' },
-  PENDING_VERIFICATION: { label: 'Verifying', className: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' },
-  FAILED: { label: 'Failed', className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
-  SUSPENDED: { label: 'Suspended', className: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' },
-  DISABLED: { label: 'Disabled', className: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const style = STATUS_STYLES[status] ?? { label: status, className: '' };
-  return <Badge className={style.className}>{style.label}</Badge>;
-}
-
 function DnsRecordsTable({ records }: { records: DnsRecord[] }) {
-  const { toast } = useToast();
   const copy = (value: string) => {
     navigator.clipboard.writeText(value);
-    toast({ title: 'Copied to clipboard' });
+    toast.success('Copied to clipboard');
   };
   return (
     <Table>
@@ -95,17 +82,10 @@ function DnsRecordsTable({ records }: { records: DnsRecord[] }) {
 }
 
 export default function DomainsPage() {
-  const { toast } = useToast();
-  const [domains, setDomains] = useState<SendingDomain[]>([]);
-  const [limits, setLimits] = useState<DomainLimits | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [addOpen, setAddOpen] = useState(false);
-  const [newDomain, setNewDomain] = useState('');
-  const [ownershipMode, setOwnershipMode] = useState<'PLATFORM' | 'ORG'>('PLATFORM');
-  const [providerId, setProviderId] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const [dnsDomain, setDnsDomain] = useState<SendingDomain | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [domainToDelete, setDomainToDelete] = useState<SendingDomain | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -113,11 +93,11 @@ export default function DomainsPage() {
       setDomains(data.domains);
       setLimits(data.limits);
     } catch {
-      toast({ title: 'Failed to load domains', variant: 'destructive' });
+      toast.error('Failed to load domains');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -132,17 +112,13 @@ export default function DomainsPage() {
         ownership_mode: ownershipMode,
         provider_id: ownershipMode === 'ORG' ? providerId || null : null,
       });
-      toast({ title: 'Domain registered', description: 'Add the DNS records to verify it.' });
+      toast.success('Domain registered — add the DNS records to verify it.');
       setAddOpen(false);
       setNewDomain('');
       setDnsDomain(created);
       await load();
     } catch (err: unknown) {
-      toast({
-        title: 'Could not register domain',
-        description: getApiErrorMessage(err, 'Unexpected error'),
-        variant: 'destructive',
-      });
+      toast.error(getApiErrorMessage(err, 'Could not register domain'));
     } finally {
       setSubmitting(false);
     }
@@ -153,37 +129,30 @@ export default function DomainsPage() {
     try {
       const result = await verifyDomainNow(domain.id);
       if (result.verified) {
-        toast({ title: `${domain.domain} is verified!` });
+        toast.success(`${domain.domain} is verified!`);
       } else {
-        toast({
-          title: 'Not verified yet',
-          description: 'DNS changes can take up to 48h to propagate. We also re-check automatically.',
-        });
+        toast.info('Not verified yet — DNS propagation can take up to 48h.');
       }
       await load();
     } catch (err: unknown) {
-      toast({
-        title: 'Verification check failed',
-        description: getApiErrorMessage(err, 'Try again in a minute.'),
-        variant: 'destructive',
-      });
+      toast.error(getApiErrorMessage(err, 'Verification check failed. Try again in a minute.'));
     } finally {
       setVerifyingId(null);
     }
   };
 
-  const handleDelete = async (domain: SendingDomain) => {
-    if (!confirm(`Delete ${domain.domain}? Its sender emails will stop working.`)) return;
+  const handleDeleteConfirm = async () => {
+    if (!domainToDelete) return;
+    setIsDeleting(true);
     try {
-      await deleteDomain(domain.id);
-      toast({ title: `${domain.domain} deleted` });
+      await deleteDomain(domainToDelete.id);
+      toast.success(`${domainToDelete.domain} deleted`);
+      setDomainToDelete(null);
       await load();
     } catch (err: unknown) {
-      toast({
-        title: 'Could not delete domain',
-        description: getApiErrorMessage(err, 'Unexpected error'),
-        variant: 'destructive',
-      });
+      toast.error(getApiErrorMessage(err, 'Could not delete domain'));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -191,25 +160,20 @@ export default function DomainsPage() {
     limits?.max_domains != null && limits.used >= limits.max_domains;
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Globe className="h-6 w-6" /> Sending Domains
-          </h1>
-          <p className="text-muted-foreground">
-            Register your own domains to send and receive email from addresses you control.
-            {limits && limits.max_domains != null && (
-              <span className="ml-2 font-medium">
-                {limits.used} of {limits.max_domains} used
-              </span>
-            )}
-          </p>
-        </div>
-        <Button onClick={() => setAddOpen(true)} disabled={!limits?.feature_enabled || !limits?.custom_domain_allowed || atLimit}>
-          <Plus className="h-4 w-4 mr-2" /> Add domain
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Sending Domains"
+        description={
+          `Register your own domains to send and receive email from addresses you control.${
+            limits && limits.max_domains != null ? ` (${limits.used} of ${limits.max_domains} used)` : ''
+          }`
+        }
+        actions={
+          <Button onClick={() => setAddOpen(true)} disabled={!limits?.feature_enabled || !limits?.custom_domain_allowed || atLimit}>
+            <Plus className="h-4 w-4 mr-2" /> Add domain
+          </Button>
+        }
+      />
 
       {limits && !limits.feature_enabled && (
         <Card className="border-yellow-300">
@@ -267,7 +231,7 @@ export default function DomainsPage() {
                         <p className="text-xs text-red-500 mt-1">{domain.suspension_reason}</p>
                       )}
                     </TableCell>
-                    <TableCell><StatusBadge status={domain.status} /></TableCell>
+                    <TableCell><StatusBadge domain="sending_domain" status={domain.status} /></TableCell>
                     <TableCell className="text-sm">
                       {domain.ownership_mode === 'PLATFORM' ? 'Platform-managed' : 'Own AWS account'}
                     </TableCell>
@@ -295,8 +259,8 @@ export default function DomainsPage() {
                         {domain.status === 'VERIFIED' && (
                           <CheckCircle2 className="h-5 w-5 text-green-500 self-center ml-1" />
                         )}
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(domain)}>
-                          <Trash2 className="h-4 w-4 text-red-500" />
+                        <Button variant="ghost" size="sm" onClick={() => setDomainToDelete(domain)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
                     </TableCell>
@@ -393,6 +357,19 @@ export default function DomainsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(domainToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setDomainToDelete(null);
+        }}
+        title={`Delete ${domainToDelete?.domain ?? 'domain'}?`}
+        description="Deleting this domain immediately disables all sender email addresses linked to it. Active campaigns using them will fail to launch."
+        confirmLabel="Delete Domain"
+        variant="destructive"
+        busy={isDeleting}
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   );
 }
