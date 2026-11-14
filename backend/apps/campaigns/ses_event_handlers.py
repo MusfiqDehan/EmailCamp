@@ -127,12 +127,15 @@ def _handle_event(event_name: str, mail_obj: Dict[str, Any], event_obj: Dict[str
 @receiver(send_received)
 def ses_send_received(sender, mail_obj, send_obj, raw_message, **kwargs):
     def processor(log: EmailDeliveryLog, occurred_at, event_obj, _mail_obj):
+        from .state_machines import resolve_next_delivery_status
+
         update_fields = set()
         if not log.sent_at or occurred_at < log.sent_at:
             log.sent_at = occurred_at
             update_fields.add("sent_at")
-        if log.delivery_status in {"QUEUED", "FAILED", "SENT"}:
-            log.delivery_status = "SENT"
+        next_status = resolve_next_delivery_status(log.delivery_status, "SENT")
+        if next_status != log.delivery_status:
+            log.delivery_status = next_status
             update_fields.add("delivery_status")
         _append_event(log, "SEND", occurred_at, event_obj or {})
         return update_fields
@@ -143,11 +146,14 @@ def ses_send_received(sender, mail_obj, send_obj, raw_message, **kwargs):
 @receiver(delivery_received)
 def ses_delivery_received(sender, mail_obj, delivery_obj, raw_message, **kwargs):
     def processor(log: EmailDeliveryLog, occurred_at, event_obj, _mail_obj):
+        from .state_machines import resolve_next_delivery_status
+
         update_fields = {"delivered_at"}
         if not log.delivered_at or occurred_at >= log.delivered_at:
             log.delivered_at = occurred_at
-        if log.delivery_status in {"QUEUED", "FAILED", "SENT", "DELIVERED"}:
-            log.delivery_status = "DELIVERED"
+        next_status = resolve_next_delivery_status(log.delivery_status, "DELIVERED")
+        if next_status != log.delivery_status:
+            log.delivery_status = next_status
             update_fields.add("delivery_status")
         _append_event(log, "DELIVERY", occurred_at, event_obj or {})
         if log.email_validation:
@@ -160,8 +166,10 @@ def ses_delivery_received(sender, mail_obj, delivery_obj, raw_message, **kwargs)
 @receiver(bounce_received)
 def ses_bounce_received(sender, mail_obj, bounce_obj, raw_message, **kwargs):
     def processor(log: EmailDeliveryLog, occurred_at, event_obj, _mail_obj):
+        from .state_machines import resolve_next_delivery_status
+
         reason = _bounce_reason(event_obj or {})
-        log.delivery_status = "BOUNCED"
+        log.delivery_status = resolve_next_delivery_status(log.delivery_status, "BOUNCED")
         log.bounced_at = occurred_at
         log.bounce_type = _normalise_bounce_type(event_obj.get("bounceType"))
         log.bounce_reason = reason
@@ -177,8 +185,10 @@ def ses_bounce_received(sender, mail_obj, bounce_obj, raw_message, **kwargs):
 @receiver(complaint_received)
 def ses_complaint_received(sender, mail_obj, complaint_obj, raw_message, **kwargs):
     def processor(log: EmailDeliveryLog, occurred_at, event_obj, _mail_obj):
+        from .state_machines import resolve_next_delivery_status
+
         complaint_reason = event_obj.get("complaintFeedbackType") or event_obj.get("complaintSubType") or "Complaint received"
-        log.delivery_status = "COMPLAINED"
+        log.delivery_status = resolve_next_delivery_status(log.delivery_status, "COMPLAINED")
         log.bounced_at = occurred_at
         log.bounce_type = "COMPLAINT"
         log.bounce_reason = complaint_reason
@@ -195,10 +205,11 @@ def ses_complaint_received(sender, mail_obj, complaint_obj, raw_message, **kwarg
 @receiver(open_received)
 def ses_open_received(sender, mail_obj, open_obj, raw_message, **kwargs):
     def processor(log: EmailDeliveryLog, occurred_at, event_obj, _mail_obj):
+        from .state_machines import resolve_next_delivery_status
+
         if not log.opened_at:
             log.opened_at = occurred_at
-        if log.delivery_status in {"DELIVERED", "SENT", "OPENED"}:
-            log.delivery_status = "OPENED"
+        log.delivery_status = resolve_next_delivery_status(log.delivery_status, "OPENED")
         if event_obj:
             log.user_agent = event_obj.get("userAgent") or log.user_agent
             log.ip_address = event_obj.get("ipAddress") or log.ip_address
@@ -212,9 +223,11 @@ def ses_open_received(sender, mail_obj, open_obj, raw_message, **kwargs):
 @receiver(click_received)
 def ses_click_received(sender, mail_obj, click_obj, raw_message, **kwargs):
     def processor(log: EmailDeliveryLog, occurred_at, event_obj, _mail_obj):
+        from .state_machines import resolve_next_delivery_status
+
         if not log.clicked_at:
             log.clicked_at = occurred_at
-        log.delivery_status = "CLICKED" if log.delivery_status not in {"BOUNCED", "COMPLAINED"} else log.delivery_status
+        log.delivery_status = resolve_next_delivery_status(log.delivery_status, "CLICKED")
         if event_obj:
             log.user_agent = event_obj.get("userAgent") or log.user_agent
             log.ip_address = event_obj.get("ipAddress") or log.ip_address
