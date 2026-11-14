@@ -38,12 +38,13 @@ class SendingDomainSerializer(serializers.ModelSerializer):
     sender_email_count = serializers.SerializerMethodField()
     is_usable = serializers.BooleanField(read_only=True)
     organization_name = serializers.CharField(source='organization.name', read_only=True)
+    allowed_actions = serializers.SerializerMethodField()
 
     class Meta:
         model = SendingDomain
         fields = [
             'id', 'organization', 'organization_name', 'domain', 'ownership_mode',
-            'region', 'status', 'dns_records', 'mail_from_subdomain',
+            'region', 'status', 'allowed_actions', 'dns_records', 'mail_from_subdomain',
             'mail_from_status', 'verified_at', 'last_checked_at',
             'verification_error', 'suspension_reason', 'legacy', 'is_usable',
             'sender_email_count', 'created_at', 'updated_at',
@@ -52,6 +53,14 @@ class SendingDomainSerializer(serializers.ModelSerializer):
 
     def get_sender_email_count(self, obj):
         return obj.sender_emails.count()
+
+    def get_allowed_actions(self, obj):
+        from ..state_machines import SENDING_DOMAIN_STATE_MACHINE
+        return SENDING_DOMAIN_STATE_MACHINE.get_allowed_transitions(
+            obj.status,
+            endpoint_params={'id': str(obj.id)},
+            instance=obj,
+        )
 
 
 class SendingDomainCreateSerializer(serializers.Serializer):
@@ -96,12 +105,13 @@ class SenderEmailSerializer(serializers.ModelSerializer):
     domain_name = serializers.CharField(source='domain.domain', read_only=True)
     receiving_supported = serializers.SerializerMethodField()
     is_usable = serializers.BooleanField(read_only=True)
+    allowed_actions = serializers.SerializerMethodField()
 
     class Meta:
         model = SenderEmail
         fields = [
             'id', 'organization', 'domain', 'domain_name', 'local_part',
-            'email_address', 'display_name', 'status', 'suspension_reason',
+            'email_address', 'display_name', 'status', 'allowed_actions', 'suspension_reason',
             'mailbox_account', 'receiving_supported', 'is_usable',
             'created_at', 'updated_at',
         ]
@@ -110,6 +120,14 @@ class SenderEmailSerializer(serializers.ModelSerializer):
     def get_receiving_supported(self, obj):
         # v1: inbound receiving works only for platform-managed domains
         return obj.domain.ownership_mode == SendingDomain.OWNERSHIP_PLATFORM
+
+    def get_allowed_actions(self, obj):
+        from ..state_machines import SENDER_EMAIL_STATE_MACHINE
+        return SENDER_EMAIL_STATE_MACHINE.get_allowed_transitions(
+            obj.status,
+            endpoint_params={'id': str(obj.id)},
+            instance=obj,
+        )
 
 
 class SenderEmailCreateSerializer(serializers.Serializer):
