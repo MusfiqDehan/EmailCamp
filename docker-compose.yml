@@ -103,6 +103,7 @@ services:
       - "traefik.http.routers.ecmp-backend.rule=Host(`emailcampaign-api.musfiqdehan.com`)"
       - "traefik.http.routers.ecmp-backend.entrypoints=websecure"
       - "traefik.http.routers.ecmp-backend.tls=true"
+      - "traefik.http.routers.ecmp-backend.priority=200"
       - "traefik.http.services.ecmp-backend.loadbalancer.server.port=8001"
 
   # ─── Celery Worker ─────────────────────────────────────────────────────
@@ -191,6 +192,7 @@ services:
       - "traefik.http.routers.ecmp-frontend.rule=Host(`emailcampaign.musfiqdehan.com`)"
       - "traefik.http.routers.ecmp-frontend.entrypoints=websecure"
       - "traefik.http.routers.ecmp-frontend.tls=true"
+      - "traefik.http.routers.ecmp-frontend.priority=200"
       - "traefik.http.services.ecmp-frontend.loadbalancer.server.port=3001"
 
 # ─── Volumes ───────────────────────────────────────────────────────────────
