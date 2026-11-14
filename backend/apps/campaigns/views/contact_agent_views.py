@@ -15,9 +15,37 @@ logger = logging.getLogger(__name__)
 
 class ContactAgentView(APIView):
     """
-    API View to manage contacts and contact lists using Gemini, with DeepSeek fallback on rate limits.
+    AI agent endpoint to manage contacts and contact lists via natural language,
+    with GET capability discovery for Agent Experience (AX).
     """
     permission_classes = [IsAuthenticated]
+
+    SUPPORTED_ACTIONS = [
+        {"action": "CREATE_CONTACT", "description": "Create or restore a contact and optionally add to a list.", "required": ["email"], "optional": ["first_name", "last_name", "phone", "list_name", "tags"]},
+        {"action": "UPDATE_CONTACT", "description": "Update an existing contact's profile or tags.", "required": ["email"], "optional": ["first_name", "last_name", "phone", "tags"]},
+        {"action": "ACTIVATE_CONTACT", "description": "Transition contact status to ACTIVE.", "required": ["email"]},
+        {"action": "UNSUBSCRIBE_CONTACT", "description": "Transition contact status to UNSUBSCRIBED.", "required": ["email"], "optional": ["description"]},
+        {"action": "DELETE_CONTACT", "description": "Soft-delete a contact and update list stats.", "required": ["email"]},
+        {"action": "ADD_TO_LIST", "description": "Add a contact to a list (creating either if missing).", "required": ["email", "list_name"]},
+        {"action": "REMOVE_FROM_LIST", "description": "Remove a contact from a specific list.", "required": ["email", "list_name"]},
+        {"action": "CREATE_CONTACT_LIST", "description": "Create a new contact list.", "required": ["list_name"], "optional": ["description", "tags"]},
+        {"action": "UPDATE_CONTACT_LIST", "description": "Rename or update a contact list.", "required": ["list_name"], "optional": ["new_list_name", "description", "tags"]},
+        {"action": "DELETE_CONTACT_LIST", "description": "Delete a contact list.", "required": ["list_name"]},
+    ]
+
+    def get(self, request):
+        """Expose agent capabilities, schemas, and related state machines."""
+        from ..state_machines import CONTACT_STATE_MACHINE
+        return Response({
+            "agent": "contacts",
+            "supported_actions": self.SUPPORTED_ACTIONS,
+            "contact_state_machine": CONTACT_STATE_MACHINE.to_schema(),
+            "examples": [
+                "Add john@example.com named John Doe to Newsletter",
+                "Create a list called VIP Customers",
+                "Unsubscribe john@example.com",
+            ],
+        })
 
     def post(self, request):
         prompt = request.data.get('prompt')
@@ -32,6 +60,8 @@ class ContactAgentView(APIView):
             Supported Actions:
             - CREATE_CONTACT: Create a new contact.
             - UPDATE_CONTACT: Update an existing contact.
+            - ACTIVATE_CONTACT: Reactivate/subscribe a contact back to ACTIVE status.
+            - UNSUBSCRIBE_CONTACT: Mark an existing contact as UNSUBSCRIBED.
             - DELETE_CONTACT: Delete a contact (soft delete).
             - ADD_TO_LIST: Add a contact to a specific list.
             - REMOVE_FROM_LIST: Remove a contact from a specific list.
@@ -49,13 +79,13 @@ class ContactAgentView(APIView):
                     "phone": "+1234567890", (Optional for contact actions)
                     "list_name": "Newsletter", (Required for list actions and ADD_TO_LIST/REMOVE_FROM_LIST)
                     "new_list_name": "New Newsletter Name", (Optional for UPDATE_CONTACT_LIST)
-                    "description": "List description", (Optional for list actions)
+                    "description": "List description or unsubscribe reason", (Optional)
                     "tags": ["tag1", "tag2"] (Optional list of strings)
                 }
             }
             
             If the request is ambiguous, return {"error": "Description of the error"}.
-            For contact actions (CREATE/UPDATE/DELETE/ADD_TO/REMOVE_FROM), email is required.
+            For contact actions (CREATE/UPDATE/ACTIVATE/UNSUBSCRIBE/DELETE/ADD_TO/REMOVE_FROM), email is required.
             For list actions (CREATE/UPDATE/DELETE_CONTACT_LIST), list_name is required.
             Return ONLY the JSON object.
             """
@@ -87,7 +117,10 @@ class ContactAgentView(APIView):
             organization = request.user.organization
 
             # Validation based on action type
-            contact_actions = ["CREATE_CONTACT", "UPDATE_CONTACT", "DELETE_CONTACT", "ADD_TO_LIST", "REMOVE_FROM_LIST"]
+            contact_actions = [
+                "CREATE_CONTACT", "UPDATE_CONTACT", "ACTIVATE_CONTACT",
+                "UNSUBSCRIBE_CONTACT", "DELETE_CONTACT", "ADD_TO_LIST", "REMOVE_FROM_LIST",
+            ]
             list_actions = ["CREATE_CONTACT_LIST", "UPDATE_CONTACT_LIST", "DELETE_CONTACT_LIST"]
 
             if action in contact_actions and not email:
@@ -162,7 +195,21 @@ class ContactAgentView(APIView):
                     contact.tags = list(set(current_tags + tags))
                     contact.save()
 
-                return Response({"message": msg, "contact": {"id": contact.id, "email": contact.email}})
+                return Response({"message": msg, "action": action, "contact": {"id": contact.id, "email": contact.email, "status": contact.status}})
+
+            elif action == "ACTIVATE_CONTACT":
+                contact = Contact.objects.filter(organization=organization, email__iexact=email).first()
+                if not contact:
+                    return Response({"error": f"Contact with email {email} not found."}, status=status.HTTP_404_NOT_FOUND)
+                contact.activate()
+                return Response({"message": f"Contact {contact.email} is now {contact.status}.", "action": action, "contact": {"id": contact.id, "email": contact.email, "status": contact.status}})
+
+            elif action == "UNSUBSCRIBE_CONTACT":
+                contact = Contact.objects.filter(organization=organization, email__iexact=email).first()
+                if not contact:
+                    return Response({"error": f"Contact with email {email} not found."}, status=status.HTTP_404_NOT_FOUND)
+                contact.unsubscribe(data.get("description") or "Unsubscribed via AI Agent")
+                return Response({"message": f"Contact {contact.email} unsubscribed.", "action": action, "contact": {"id": contact.id, "email": contact.email, "status": contact.status}})
 
             elif action == "UPDATE_CONTACT":
                 contact = Contact.objects.filter(organization=organization, email__iexact=email).first()
