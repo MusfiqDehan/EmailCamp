@@ -63,27 +63,34 @@ export const TEMPLATE_CATEGORIES = [
 
 export const APPROVAL_STATUS = {
   DRAFT: {
-    value: 'draft',
+    value: 'DRAFT',
     label: 'Draft',
-    color: 'bg-gray-100 text-gray-800',
+    color: 'bg-secondary text-secondary-foreground',
     icon: '📝'
   },
-  PENDING: {
-    value: 'pending',
+  PENDING_APPROVAL: {
+    value: 'PENDING_APPROVAL',
     label: 'Pending Approval',
-    color: 'bg-yellow-100 text-yellow-800',
+    color: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+    icon: '⏳'
+  },
+  // Backward-compatible alias for legacy callers
+  PENDING: {
+    value: 'PENDING_APPROVAL',
+    label: 'Pending Approval',
+    color: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
     icon: '⏳'
   },
   APPROVED: {
-    value: 'approved',
+    value: 'APPROVED',
     label: 'Approved',
-    color: 'bg-green-100 text-green-800',
+    color: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
     icon: '✅'
   },
   REJECTED: {
-    value: 'rejected',
+    value: 'REJECTED',
     label: 'Rejected',
-    color: 'bg-red-100 text-red-800',
+    color: 'bg-destructive/15 text-destructive',
     icon: '❌'
   }
 } as const;
@@ -103,60 +110,77 @@ export const TEMPLATE_TYPES = {
 
 export const NOTIFICATION_TYPES = {
   TEMPLATE_UPDATE: {
-    value: 'template_update',
+    value: 'TEMPLATE_UPDATE',
     label: 'Template Updated',
     icon: '🔄',
-    color: 'bg-blue-100 text-blue-800'
+    color: 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
   },
   APPROVAL_REQUEST: {
-    value: 'approval_request',
+    value: 'APPROVAL_REQUEST',
     label: 'Approval Request',
     icon: '📋',
-    color: 'bg-purple-100 text-purple-800'
+    color: 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
   },
   APPROVAL_APPROVED: {
-    value: 'approval_approved',
+    value: 'APPROVAL_APPROVED',
     label: 'Approved',
     icon: '✅',
-    color: 'bg-green-100 text-green-800'
+    color: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
   },
   APPROVAL_REJECTED: {
-    value: 'approval_rejected',
+    value: 'APPROVAL_REJECTED',
     label: 'Rejected',
     icon: '❌',
-    color: 'bg-red-100 text-red-800'
+    color: 'bg-destructive/15 text-destructive'
   }
 } as const;
 
 export const CAMPAIGN_STATUS = {
   DRAFT: {
-    value: 'draft',
+    value: 'DRAFT',
     label: 'Draft',
-    color: 'bg-gray-100 text-gray-800'
+    color: 'bg-secondary text-secondary-foreground'
   },
   SCHEDULED: {
-    value: 'scheduled',
+    value: 'SCHEDULED',
     label: 'Scheduled',
-    color: 'bg-blue-100 text-blue-800'
+    color: 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
   },
+  SENDING: {
+    value: 'SENDING',
+    label: 'Sending',
+    color: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+  },
+  // Backward-compatible alias
   RUNNING: {
-    value: 'running',
-    label: 'Running',
-    color: 'bg-green-100 text-green-800'
+    value: 'SENDING',
+    label: 'Sending',
+    color: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
   },
   PAUSED: {
-    value: 'paused',
+    value: 'PAUSED',
     label: 'Paused',
-    color: 'bg-yellow-100 text-yellow-800'
+    color: 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
   },
+  SENT: {
+    value: 'SENT',
+    label: 'Sent',
+    color: 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
+  },
+  // Backward-compatible alias
   COMPLETED: {
-    value: 'completed',
-    label: 'Completed',
-    color: 'bg-purple-100 text-purple-800'
+    value: 'SENT',
+    label: 'Sent',
+    color: 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
   },
   CANCELLED: {
-    value: 'cancelled',
+    value: 'CANCELLED',
     label: 'Cancelled',
-    color: 'bg-red-100 text-red-800'
+    color: 'bg-destructive/15 text-destructive'
+  },
+  FAILED: {
+    value: 'FAILED',
+    label: 'Failed',
+    color: 'bg-destructive/15 text-destructive'
   }
 } as const;
