@@ -82,6 +82,14 @@ function DnsRecordsTable({ records }: { records: DnsRecord[] }) {
 }
 
 export default function DomainsPage() {
+  const [domains, setDomains] = useState<SendingDomain[]>([]);
+  const [limits, setLimits] = useState<DomainLimits | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [newDomain, setNewDomain] = useState('');
+  const [ownershipMode, setOwnershipMode] = useState<'PLATFORM' | 'ORG'>('PLATFORM');
+  const [providerId, setProviderId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [dnsDomain, setDnsDomain] = useState<SendingDomain | null>(null);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [domainToDelete, setDomainToDelete] = useState<SendingDomain | null>(null);
