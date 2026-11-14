@@ -2,7 +2,20 @@
 
 import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
-import { ThemeProvider } from 'next-themes';
+import { Toaster as SonnerToaster } from 'sonner';
+import { ThemeProvider, useTheme } from 'next-themes';
+
+function ThemedSonnerToaster() {
+  const { resolvedTheme } = useTheme();
+  return (
+    <SonnerToaster
+      theme={resolvedTheme === 'dark' ? 'dark' : 'light'}
+      richColors
+      closeButton
+      position="top-right"
+    />
+  );
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -15,6 +28,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <AuthProvider>
         {children}
         <Toaster />
+        <ThemedSonnerToaster />
       </AuthProvider>
     </ThemeProvider>
   );
