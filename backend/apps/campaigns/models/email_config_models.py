@@ -499,34 +499,58 @@ class TemplateApprovalRequest(models.Model):
     def approve(self, reviewer, notes=''):
         """Approve the template and update its status."""
         from django.utils import timezone
-        
+        from django.core.exceptions import ValidationError
+        from ..state_machines import TEMPLATE_APPROVAL_STATE_MACHINE, InvalidStateTransition
+
+        try:
+            TEMPLATE_APPROVAL_STATE_MACHINE.validate_transition(
+                self.template.approval_status,
+                action='approve',
+                target_state=EmailTemplate.ApprovalStatus.APPROVED,
+            )
+        except InvalidStateTransition as exc:
+            raise ValidationError(str(exc))
+
+        now = timezone.now()
         self.status = self.ApprovalStatus.APPROVED
         self.reviewed_by = reviewer
-        self.reviewed_at = timezone.now()
+        self.reviewed_at = now
         self.reviewer_notes = notes
         self.save()
-        
+
         # Update template approval status
         self.template.approval_status = EmailTemplate.ApprovalStatus.APPROVED
         self.template.is_draft = False
         self.template.approved_by = reviewer
-        self.template.approved_at = timezone.now()
+        self.template.approved_at = now
         self.template.save()
-        
+
         return self
-    
+
     def reject(self, reviewer, notes=''):
-        """Reject the template."""
+        """Reject the template and return is_draft=True so the author can revise/resubmit."""
         from django.utils import timezone
-        
+        from django.core.exceptions import ValidationError
+        from ..state_machines import TEMPLATE_APPROVAL_STATE_MACHINE, InvalidStateTransition
+
+        try:
+            TEMPLATE_APPROVAL_STATE_MACHINE.validate_transition(
+                self.template.approval_status,
+                action='reject',
+                target_state=EmailTemplate.ApprovalStatus.REJECTED,
+            )
+        except InvalidStateTransition as exc:
+            raise ValidationError(str(exc))
+
         self.status = self.ApprovalStatus.REJECTED
         self.reviewed_by = reviewer
         self.reviewed_at = timezone.now()
         self.reviewer_notes = notes
         self.save()
-        
-        # Update template approval status
+
+        # Keep template editable for revision & resubmission
         self.template.approval_status = EmailTemplate.ApprovalStatus.REJECTED
+        self.template.is_draft = True
         self.template.save()
-        
+
         return self
