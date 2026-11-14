@@ -266,9 +266,7 @@ export default function CampaignDetailPage() {
         setResetDialogOpen(true);
     };
 
-    const [resetDialogOpen, setResetDialogOpen] = useState(false);
     const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-    const [isResetting, setIsResetting] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
     const [isTransitioning, setIsTransitioning] = useState(false);
 
