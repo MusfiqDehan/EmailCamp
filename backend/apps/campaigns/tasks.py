@@ -1131,9 +1131,7 @@ def launch_campaign_task(self, campaign_id):
     
     total_contacts = contacts.count()
     if total_contacts == 0:
-        campaign.status = 'SENT'
-        campaign.completed_at = timezone.now()
-        campaign.save(update_fields=['status', 'completed_at'])
+        campaign.mark_completed()
         logger.info(f"[launch_campaign_task] Campaign {campaign_id} completed - no contacts to send")
         return {'success': True, 'sent': 0, 'message': 'No contacts to send'}
 
@@ -1145,8 +1143,7 @@ def launch_campaign_task(self, campaign_id):
         validate_sender(campaign.organization, campaign.from_email)
     except DjangoValidationError as exc:
         reason = '; '.join(exc.messages)
-        campaign.status = 'FAILED'
-        campaign.save(update_fields=['status'])
+        campaign.mark_failed(f'Sender validation failed: {reason}')
         logger.error(f"[launch_campaign_task] Campaign {campaign_id} sender rejected: {reason}")
         return {'success': False, 'error': f'Sender validation failed: {reason}'}
 
@@ -1212,8 +1209,7 @@ def launch_campaign_task(self, campaign_id):
             raise Exception("No email provider configured for this organization")
     except Exception as e:
         logger.error(f"[launch_campaign_task] Failed to initialize email provider: {e}")
-        campaign.status = 'FAILED'
-        campaign.save(update_fields=['status'])
+        campaign.mark_failed(str(e))
         return {'success': False, 'error': str(e)}
     
     # Process in batches
@@ -1385,10 +1381,8 @@ def launch_campaign_task(self, campaign_id):
             import time
             time.sleep(batch_delay)
     
-    # Update campaign status
-    campaign.status = 'SENT'
-    campaign.completed_at = timezone.now()
-    campaign.save(update_fields=['status', 'completed_at'])
+    # Update campaign status and clean up any associated periodic schedule
+    campaign.mark_completed()
     
     # Update stats
     campaign.update_stats_from_logs()
