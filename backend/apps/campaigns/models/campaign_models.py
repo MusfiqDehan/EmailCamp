@@ -308,6 +308,27 @@ class Campaign(BaseModel):
         
         return recipient_count
     
+    def schedule(self, scheduled_at):
+        """Schedule a draft campaign for future automated launch."""
+        from ..state_machines import CAMPAIGN_STATE_MACHINE, InvalidStateTransition
+
+        with transaction.atomic():
+            locked = type(self).objects.select_for_update().get(pk=self.pk)
+            try:
+                CAMPAIGN_STATE_MACHINE.validate_transition(
+                    locked.status, action='schedule', target_state='SCHEDULED'
+                )
+            except InvalidStateTransition as exc:
+                raise ValidationError(str(exc))
+
+            locked.scheduled_at = scheduled_at
+            locked.status = 'SCHEDULED'
+            locked.calculate_total_recipients()
+            locked.save()
+            self.status = locked.status
+            self.scheduled_at = locked.scheduled_at
+            self.stats_total_recipients = locked.stats_total_recipients
+
     def launch(self):
         """
         Launch the campaign (change status and start sending).
@@ -315,10 +336,16 @@ class Campaign(BaseModel):
         Status transition is row-locked so two concurrent /launch/ calls
         cannot both queue a send task.
         """
+        from ..state_machines import CAMPAIGN_STATE_MACHINE, InvalidStateTransition
+
         with transaction.atomic():
             locked = type(self).objects.select_for_update().get(pk=self.pk)
-            if locked.status not in ['DRAFT', 'SCHEDULED', 'PAUSED']:
-                raise ValidationError(f"Cannot launch campaign with status {locked.status}")
+            try:
+                CAMPAIGN_STATE_MACHINE.validate_transition(
+                    locked.status, action='launch', target_state='SENDING'
+                )
+            except InvalidStateTransition as exc:
+                raise ValidationError(str(exc))
 
             locked.status = 'SENDING'
             locked.started_at = timezone.now()
@@ -333,10 +360,16 @@ class Campaign(BaseModel):
 
     def pause(self):
         """Pause a running campaign."""
+        from ..state_machines import CAMPAIGN_STATE_MACHINE, InvalidStateTransition
+
         with transaction.atomic():
             locked = type(self).objects.select_for_update().get(pk=self.pk)
-            if locked.status != 'SENDING':
-                raise ValidationError("Can only pause a sending campaign")
+            try:
+                CAMPAIGN_STATE_MACHINE.validate_transition(
+                    locked.status, action='pause', target_state='PAUSED'
+                )
+            except InvalidStateTransition as exc:
+                raise ValidationError(str(exc))
 
             locked.status = 'PAUSED'
             locked.save(update_fields=['status'])
@@ -344,10 +377,16 @@ class Campaign(BaseModel):
 
     def resume(self):
         """Resume a paused campaign."""
+        from ..state_machines import CAMPAIGN_STATE_MACHINE, InvalidStateTransition
+
         with transaction.atomic():
             locked = type(self).objects.select_for_update().get(pk=self.pk)
-            if locked.status != 'PAUSED':
-                raise ValidationError("Can only resume a paused campaign")
+            try:
+                CAMPAIGN_STATE_MACHINE.validate_transition(
+                    locked.status, action='resume', target_state='SENDING'
+                )
+            except InvalidStateTransition as exc:
+                raise ValidationError(str(exc))
 
             locked.status = 'SENDING'
             locked.save(update_fields=['status'])
@@ -358,23 +397,59 @@ class Campaign(BaseModel):
 
     def cancel(self):
         """Cancel a campaign."""
+        from ..state_machines import CAMPAIGN_STATE_MACHINE, InvalidStateTransition
+
         with transaction.atomic():
             locked = type(self).objects.select_for_update().get(pk=self.pk)
-            if locked.status in ['SENT', 'CANCELLED']:
-                raise ValidationError(f"Cannot cancel campaign with status {locked.status}")
+            try:
+                CAMPAIGN_STATE_MACHINE.validate_transition(
+                    locked.status, action='cancel', target_state='CANCELLED'
+                )
+            except InvalidStateTransition as exc:
+                raise ValidationError(str(exc))
 
             locked.status = 'CANCELLED'
             locked._cleanup_periodic_task()
             locked.save(update_fields=['status'])
             self.status = locked.status
-    
+
+    def reset(self):
+        """Reset a scheduled, stuck sending, paused, cancelled, or failed campaign back to DRAFT."""
+        from ..state_machines import CAMPAIGN_STATE_MACHINE, InvalidStateTransition
+
+        with transaction.atomic():
+            locked = type(self).objects.select_for_update().get(pk=self.pk)
+            try:
+                CAMPAIGN_STATE_MACHINE.validate_transition(
+                    locked.status, action='reset', target_state='DRAFT'
+                )
+            except InvalidStateTransition as exc:
+                raise ValidationError(str(exc))
+
+            previous_status = locked.status
+            locked.status = 'DRAFT'
+            locked.started_at = None
+            locked.scheduled_at = None
+            locked._cleanup_periodic_task()
+            locked.save(update_fields=['status', 'started_at', 'scheduled_at'])
+            self.status = locked.status
+            self.started_at = locked.started_at
+            self.scheduled_at = locked.scheduled_at
+            return previous_status
+
     def mark_completed(self):
         """Mark campaign as completed."""
-        self.status = 'SENT'
+        from ..state_machines import CAMPAIGN_STATE_MACHINE
+
+        if CAMPAIGN_STATE_MACHINE.can_transition(self.status, 'SENT'):
+            self.status = 'SENT'
+        else:
+            # Allow idempotent completion if called from task completion path
+            self.status = 'SENT'
         self.completed_at = timezone.now()
         self._cleanup_periodic_task()
         self.save(update_fields=['status', 'completed_at'])
-    
+
     def mark_failed(self, error_message: str = ""):
         """Mark campaign as failed."""
         self.status = 'FAILED'
@@ -384,6 +459,17 @@ class Campaign(BaseModel):
                 self.segment_filters = {}
             self.segment_filters['_error'] = error_message
         self.save(update_fields=['status', 'segment_filters'])
+
+    def get_state_payload(self, actor: str = 'user'):
+        """Return state metadata and allowed actions for UX/AX clients."""
+        from ..state_machines import CAMPAIGN_STATE_MACHINE
+
+        return CAMPAIGN_STATE_MACHINE.get_state_payload(
+            self.status,
+            actor=actor,
+            endpoint_params={'id': str(self.id)},
+            instance=self,
+        )
     
     def duplicate(self, new_name: str = None):
         """
