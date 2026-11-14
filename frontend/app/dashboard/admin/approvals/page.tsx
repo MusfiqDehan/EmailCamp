@@ -366,11 +366,9 @@ export default function PendingApprovalsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Status</label>
-                  <p className="mt-1">
-                    <Badge className={getApprovalStatusInfo(selectedTemplate.approval_status).color}>
-                      {getApprovalStatusInfo(selectedTemplate.approval_status).label}
-                    </Badge>
-                  </p>
+                  <div className="mt-1">
+                    <StatusBadge domain="template_approval" status={selectedTemplate.approval_status} />
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Version</label>
