@@ -29,7 +29,9 @@ import {
   FileEdit, XCircle, CheckCircle2, MoreVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getCategoryInfo, getApprovalStatusInfo, formatDate, formatVersion } from '@/config/template-utils';
+import { getCategoryInfo, formatDate, formatVersion } from '@/config/template-utils';
+import { PageHeader } from '@/components/ui/page-header';
+import { StatusBadge } from '@/components/ui/status-badge';
 
 interface Template {
   id: string;
@@ -121,7 +123,6 @@ export default function PendingApprovalsPage() {
 
   const renderTemplateCard = (template: Template) => {
     const categoryInfo = getCategoryInfo(template.category?.toLowerCase() || 'other');
-    const statusInfo = getApprovalStatusInfo(template.approval_status);
     
     return (
       <Card key={template.id} className="hover:shadow-md transition-shadow">
@@ -142,9 +143,7 @@ export default function PendingApprovalsPage() {
                 <Badge variant="secondary" className={categoryInfo.color}>
                   {categoryInfo.label}
                 </Badge>
-                <Badge className={statusInfo.color}>
-                  {statusInfo.label}
-                </Badge>
+                <StatusBadge domain="template_approval" status={template.approval_status} />
                 <span>Created {formatDate(template.created_at)}</span>
               </div>
             </div>
@@ -233,13 +232,11 @@ export default function PendingApprovalsPage() {
   );
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Template Approvals</h1>
-        <p className="text-muted-foreground">
-          Review and approve global template submissions
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Template Approvals"
+        description="Review and approve global template submissions"
+      />
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">
