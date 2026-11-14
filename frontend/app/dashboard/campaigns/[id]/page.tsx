@@ -8,9 +8,12 @@ import api from '@/config/axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { ArrowLeft, Play, Copy, Eye, Send, AlertCircle, CheckCircle2, Clock, PauseCircle, XCircle, Rocket, Calendar, RotateCcw, LineChart, Filter } from 'lucide-react';
+import { ArrowLeft, Play, Copy, Eye, Send, AlertCircle, CheckCircle2, Clock, PauseCircle, XCircle, Rocket, Calendar, RotateCcw, LineChart, Filter, StopCircle } from 'lucide-react';
 import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates';
 import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { CAMPAIGN_STATES } from '@/config/state-machines';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
     AlertDialog,
@@ -263,6 +266,12 @@ export default function CampaignDetailPage() {
         setResetDialogOpen(true);
     };
 
+    const [resetDialogOpen, setResetDialogOpen] = useState(false);
+    const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+    const [isResetting, setIsResetting] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
+    const [isTransitioning, setIsTransitioning] = useState(false);
+
     const handleResetConfirm = async () => {
         setIsResetting(true);
         try {
@@ -279,15 +288,59 @@ export default function CampaignDetailPage() {
         }
     };
 
+    const handlePause = async () => {
+        setIsTransitioning(true);
+        try {
+            const response = await api.post(`/campaigns/${id}/pause/`);
+            toast.success(response.data.message || 'Campaign paused');
+            fetchCampaign();
+        } catch (error: unknown) {
+            const axiosError = error as AxiosError<{ error?: string }>;
+            toast.error(axiosError.response?.data?.error || 'Failed to pause campaign');
+        } finally {
+            setIsTransitioning(false);
+        }
+    };
+
+    const handleResume = async () => {
+        setIsTransitioning(true);
+        try {
+            const response = await api.post(`/campaigns/${id}/resume/`);
+            toast.success(response.data.message || 'Campaign resumed');
+            fetchCampaign();
+        } catch (error: unknown) {
+            const axiosError = error as AxiosError<{ error?: string }>;
+            toast.error(axiosError.response?.data?.error || 'Failed to resume campaign');
+        } finally {
+            setIsTransitioning(false);
+        }
+    };
+
+    const handleCancelConfirm = async () => {
+        setIsCancelling(true);
+        try {
+            const response = await api.post(`/campaigns/${id}/cancel/`);
+            toast.success(response.data.message || 'Campaign cancelled');
+            setCancelDialogOpen(false);
+            fetchCampaign();
+        } catch (error: unknown) {
+            const axiosError = error as AxiosError<{ error?: string }>;
+            toast.error(axiosError.response?.data?.error || 'Failed to cancel campaign');
+        } finally {
+            setIsCancelling(false);
+        }
+    };
+
     const getStatusIcon = (status: string) => {
         switch (status) {
-            case 'SENT': return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-            case 'SENDING': return <Send className="h-5 w-5 text-blue-500 animate-pulse" />;
-            case 'DRAFT': return <Clock className="h-5 w-5 text-gray-500" />;
-            case 'SCHEDULED': return <Clock className="h-5 w-5 text-orange-500" />;
-            case 'PAUSED': return <PauseCircle className="h-5 w-5 text-yellow-500" />;
-            case 'CANCELLED': return <XCircle className="h-5 w-5 text-red-500" />;
-            default: return <AlertCircle className="h-5 w-5 text-gray-500" />;
+            case 'SENT': return <CheckCircle2 className="h-5 w-5 text-emerald-500" />;
+            case 'SENDING': return <Send className="h-5 w-5 text-sky-500 animate-pulse" />;
+            case 'DRAFT': return <Clock className="h-5 w-5 text-muted-foreground" />;
+            case 'SCHEDULED': return <Clock className="h-5 w-5 text-sky-500" />;
+            case 'PAUSED': return <PauseCircle className="h-5 w-5 text-amber-500" />;
+            case 'CANCELLED': return <XCircle className="h-5 w-5 text-destructive" />;
+            case 'FAILED': return <AlertCircle className="h-5 w-5 text-destructive" />;
+            default: return <AlertCircle className="h-5 w-5 text-muted-foreground" />;
         }
     };
 
@@ -311,38 +364,68 @@ export default function CampaignDetailPage() {
                         <p className="text-muted-foreground">{campaign.description || 'No description provided'}</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button variant="outline" onClick={handleDuplicateClick}>
-                        <Copy className="mr-2 h-4 w-4" /> Duplicate
-                    </Button>
-                    <Button variant="outline" onClick={handlePreview} disabled={isPreviewLoading}>
-                        <Eye className="mr-2 h-4 w-4" /> {isPreviewLoading ? 'Generating...' : 'Preview Content'}
-                    </Button>
-                    {campaign.status === 'DRAFT' && (
-                        <>
-                            <Button variant="outline" onClick={handleScheduleClick}>
-                                <Calendar className="mr-2 h-4 w-4" /> Schedule
-                            </Button>
-                            <Button onClick={handleLaunchClick} className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90">
-                                <Play className="mr-2 h-4 w-4" /> Launch Campaign
-                            </Button>
-                        </>
-                    )}
-                    {campaign.status === 'SCHEDULED' && (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
-                            <Clock className="h-4 w-4 text-orange-600" />
-                            <span className="text-sm font-medium text-orange-700 dark:text-orange-400">
-                                Scheduled: {campaign.scheduled_at ? new Date(campaign.scheduled_at).toLocaleString() : 'N/A'}
-                            </span>
-                        </div>
-                    )}
-                    {['SCHEDULED', 'SENDING', 'PAUSED', 'CANCELLED'].includes(campaign.status) && (
-                        <Button variant="outline" onClick={handleResetClick} className="border-amber-500 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">
-                            <RotateCcw className="mr-2 h-4 w-4" /> Reset to Draft
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={handleDuplicateClick}>
+                            <Copy className="mr-2 h-4 w-4" /> Duplicate
                         </Button>
-                    )}
+                        <Button variant="outline" onClick={handlePreview} disabled={isPreviewLoading}>
+                            <Eye className="mr-2 h-4 w-4" /> {isPreviewLoading ? 'Generating...' : 'Preview Content'}
+                        </Button>
+                        {campaign.status === 'DRAFT' && (
+                            <>
+                                <Button variant="outline" onClick={handleScheduleClick}>
+                                    <Calendar className="mr-2 h-4 w-4" /> Schedule
+                                </Button>
+                                <Button onClick={handleLaunchClick} className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90">
+                                    <Play className="mr-2 h-4 w-4" /> Launch Campaign
+                                </Button>
+                            </>
+                        )}
+                        {campaign.status === 'SCHEDULED' && (
+                            <>
+                                <Button onClick={handleLaunchClick} className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90">
+                                    <Play className="mr-2 h-4 w-4" /> Launch Now
+                                </Button>
+                                <div className="flex items-center gap-2 px-3 py-2 bg-sky-500/10 border border-sky-500/20 rounded-lg">
+                                    <Clock className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                                    <span className="text-sm font-medium text-sky-700 dark:text-sky-300">
+                                        Scheduled: {campaign.scheduled_at ? new Date(campaign.scheduled_at).toLocaleString() : 'N/A'}
+                                    </span>
+                                </div>
+                            </>
+                        )}
+                        {campaign.status === 'SENDING' && (
+                            <Button variant="outline" onClick={handlePause} disabled={isTransitioning}>
+                                <PauseCircle className="mr-2 h-4 w-4" /> Pause
+                            </Button>
+                        )}
+                        {campaign.status === 'PAUSED' && (
+                            <Button onClick={handleResume} disabled={isTransitioning} className="bg-gradient-to-r from-primary to-purple-600 hover:opacity-90">
+                                <Play className="mr-2 h-4 w-4" /> Resume
+                            </Button>
+                        )}
+                        {['DRAFT', 'SCHEDULED', 'SENDING', 'PAUSED', 'FAILED'].includes(campaign.status) && (
+                            <Button
+                                variant="outline"
+                                onClick={() => setCancelDialogOpen(true)}
+                                className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                            >
+                                <StopCircle className="mr-2 h-4 w-4" /> Cancel
+                            </Button>
+                        )}
+                        {['SCHEDULED', 'SENDING', 'PAUSED', 'CANCELLED', 'FAILED'].includes(campaign.status) && (
+                            <Button variant="outline" onClick={handleResetClick} className="border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10">
+                                <RotateCcw className="mr-2 h-4 w-4" /> Reset to Draft
+                            </Button>
+                        )}
+                    </div>
                 </div>
-            </div>
+
+                {CAMPAIGN_STATES[campaign.status]?.recoveryHint && campaign.status !== 'SENT' && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+                        {CAMPAIGN_STATES[campaign.status].recoveryHint}
+                    </div>
+                )}
 
             {analytics && (analytics.totals.sent > 0 || (analytics.timeline && analytics.timeline.length > 0)) && (
                 <div className="grid gap-6 lg:grid-cols-3">
@@ -468,7 +551,7 @@ export default function CampaignDetailPage() {
                         <CardContent className="space-y-6">
                             <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50 border">
                                 <span className="text-sm font-medium">Current Status</span>
-                                <Badge variant={campaign.status === 'SENT' ? 'default' : 'outline'}>{campaign.status}</Badge>
+                                <StatusBadge domain="campaign" status={campaign.status} />
                             </div>
 
                             <div className="space-y-2">
@@ -486,11 +569,11 @@ export default function CampaignDetailPage() {
                                 </div>
                                 <div className="flex justify-between text-sm">
                                     <span className="text-muted-foreground">Click rate</span>
-                                    <span className="font-bold text-purple-600">{analytics?.totals?.click_rate ?? 0}%</span>
+                                    <span className="font-bold text-purple-600 dark:text-purple-400">{analytics?.totals?.click_rate ?? 0}%</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
                                     <span className="text-muted-foreground">Bounce rate</span>
-                                    <span className="font-bold text-orange-600">{analytics?.totals?.bounce_rate ?? 0}%</span>
+                                    <span className="font-bold text-amber-600 dark:text-amber-400">{analytics?.totals?.bounce_rate ?? 0}%</span>
                                 </div>
                                 {analytics?.engagement && (
                                     <>
@@ -709,6 +792,17 @@ export default function CampaignDetailPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <ConfirmDialog
+                open={cancelDialogOpen}
+                onOpenChange={setCancelDialogOpen}
+                title="Cancel Campaign"
+                description={`Cancel "${campaign.name}"? Remaining unsent recipients will not receive emails, and any scheduled task will be removed.`}
+                confirmLabel="Cancel Campaign"
+                variant="destructive"
+                busy={isCancelling}
+                onConfirm={handleCancelConfirm}
+            />
         </div>
     );
 }
