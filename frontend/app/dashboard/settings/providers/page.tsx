@@ -5,8 +5,11 @@ import Link from 'next/link';
 import api from '@/config/axios';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Trash2, CheckCircle, XCircle, RefreshCw, AlertTriangle, Edit2, Eye } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, XCircle, RefreshCw, AlertTriangle, Edit2, Eye, Server } from 'lucide-react';
 import { toast } from 'sonner';
+import { PageHeader } from '@/components/ui/page-header';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -102,20 +105,33 @@ export default function ProvidersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Email Providers</h2>
-          <p className="text-muted-foreground">Manage your email sending services.</p>
-        </div>
-        <Link href="/dashboard/settings/providers/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" /> Add Provider
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title="Email Providers"
+        description="Manage your email sending services."
+        actions={
+          <Link href="/dashboard/settings/providers/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" /> Add Provider
+            </Button>
+          </Link>
+        }
+      />
 
       {isLoading ? (
-        <div>Loading...</div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader>
+                <div className="h-5 w-36 rounded bg-muted" />
+                <div className="mt-2 h-4 w-24 rounded bg-muted" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="h-4 w-full rounded bg-muted" />
+                <div className="h-4 w-2/3 rounded bg-muted" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {providers.map((provider) => (
@@ -153,14 +169,7 @@ export default function ProvidersPage() {
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Status</span>
-                    <div className="flex items-center gap-1">
-                      {provider.health_status === 'HEALTHY' ? (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <XCircle className="h-4 w-4 text-red-500" />
-                      )}
-                      <span>{provider.health_status}</span>
-                    </div>
+                    <StatusBadge domain="provider_health" status={provider.health_status} />
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Sent Today</span>
@@ -176,8 +185,19 @@ export default function ProvidersPage() {
             </Card>
           ))}
           {providers.length === 0 && (
-            <div className="col-span-full flex h-32 items-center justify-center rounded-lg border border-dashed">
-              <p className="text-muted-foreground">No providers configured.</p>
+            <div className="col-span-full">
+              <EmptyState
+                icon={Server}
+                title="No email providers configured"
+                description="Add an SMTP relay, Amazon SES, SendGrid, or Brevo integration to start sending campaigns."
+                action={
+                  <Link href="/dashboard/settings/providers/new">
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" /> Add Provider
+                    </Button>
+                  </Link>
+                }
+              />
             </div>
           )}
         </div>
