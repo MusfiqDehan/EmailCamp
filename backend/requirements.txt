@@ -142,7 +142,7 @@ stack-data==0.6.3
 tenacity==9.1.4
 traitlets==5.16.1
 twilio==9.10.9
-twisted==26.4.0
+twisted==26.10.0rc1
 txaio==26.6.1
 typing-extensions==4.16.0
 typing-inspection==0.4.2
